@@ -1,0 +1,433 @@
+openapi: 3.0.3
+info:
+  title: BPJS Biometric Automation Agent API
+  description: |
+    HTTP automation service for legacy BPJS biometric applications (Frista.exe and Finger.exe).
+    Enables hospital systems (SIMRS, kiosks, telemedicine) to trigger biometric verification
+    workflows programmatically without manual operator intervention.
+    
+    **Base URL**: `http://127.0.0.1:5000` (localhost only)
+    
+    **Authentication**: Optional API key via `X-API-Key` header (configurable)
+    
+    **Concurrency**: Sequential processing - concurrent requests are queued (FIFO)
+  version: 1.0.0
+  contact:
+    name: Hospital IT Support
+    email: support@example.com
+
+servers:
+  - url: http://127.0.0.1:5000
+    description: Local automation agent (production)
+  - url: http://127.0.0.1:5001
+    description: Local automation agent (development/testing)
+
+tags:
+  - name: Frista Automation
+    description: Endpoints for automating Frista.exe (biometric verification)
+  - name: Finger Automation
+    description: Endpoints for automating Finger.exe (fingerprint scanning)
+  - name: Health & Monitoring
+    description: Service health check endpoint
+
+paths:
+  /run_exe:
+    get:
+      tags:
+        - Frista Automation
+      summary: Launch Frista and execute biometric verification
+      description: |
+        Launches Frista.exe, performs auto-login, injects patient NOKA number,
+        and triggers biometric verification workflow. Returns when verification
+        completes or timeout occurs (default 30 seconds).
+        
+        **Process**: Launch → Login → Inject NOKA → Trigger Verification → Return Status
+        
+        **Concurrency**: If automation already in progress, request is queued and
+        processed sequentially.
+      operationId: runFristaAutomation
+      parameters:
+        - name: no_peserta
+          in: query
+          required: true
+          description: BPJS participant number (NOKA) - must be 13-digit numeric string
+          schema:
+            type: string
+            pattern: '^\d{13}$'
+            example: "1234567890123"
+        - name: X-API-Key
+          in: header
+          required: false
+          description: API key for authentication (if enabled in configuration)
+          schema:
+            type: string
+            example: "your-secret-api-key"
+      responses:
+        '200':
+          description: Automation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  summary: Successful verification
+                  value:
+                    status: success
+                    code: AUTOMATION_COMPLETED
+                    message: "Frista automation completed successfully"
+                    data:
+                      correlationId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                      duration: 2.345
+                      processId: 12345
+                      verificationStatus: "Verified"
+        '400':
+          description: Invalid request (validation failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_noka:
+                  summary: Invalid NOKA format
+                  value:
+                    status: error
+                    code: VALIDATION_INVALID_NOKA_FORMAT
+                    message: "NOKA must be exactly 13 digits. Received: '12345'"
+                    data:
+                      correlationId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                      field: "no_peserta"
+                      constraint: "Must match pattern ^\\d{13}$"
+        '401':
+          description: Unauthorized (API key missing or invalid)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_key:
+                  value:
+                    status: error
+                    code: AUTH_MISSING_API_KEY
+                    message: "X-API-Key header required. Check agent configuration."
+        '500':
+          description: Automation failed (internal error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                element_not_found:
+                  summary: UI element not found
+                  value:
+                    status: error
+                    code: AUTOMATION_ELEMENT_NOT_FOUND
+                    message: "Login button could not be located. Check UI element map in config.json."
+                    data:
+                      correlationId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                      elementName: "LoginButton"
+                      lastAttempt: "AutomationId: btnLogin (not found after 3 retries)"
+                login_failed:
+                  summary: Login authentication failed
+                  value:
+                    status: error
+                    code: AUTOMATION_LOGIN_FAILED
+                    message: "Login failed. Verify credentials in config.json."
+                    data:
+                      correlationId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        '504':
+          description: Gateway timeout (automation exceeded time limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                timeout:
+                  value:
+                    status: error
+                    code: TIMEOUT_OVERALL_WORKFLOW
+                    message: "Automation exceeded 30 second timeout. Process terminated."
+                    data:
+                      correlationId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                      lastStep: "WaitingForVerificationResult"
+
+  /stop_exe:
+    get:
+      tags:
+        - Frista Automation
+      summary: Force-terminate Frista process
+      description: |
+        Immediately terminates any running Frista.exe process. Use when application
+        is frozen or stuck. Clears automation state and resets agent to ready state.
+        
+        **Safe to call** even if no process is running (returns success).
+      operationId: stopFristaProcess
+      parameters:
+        - name: X-API-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Process terminated successfully (or was not running)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                terminated:
+                  summary: Process was running and terminated
+                  value:
+                    status: success
+                    code: PROCESS_TERMINATED
+                    message: "Frista.exe (PID 12345) terminated successfully"
+                    data:
+                      processId: 12345
+                      wasRunning: true
+                not_running:
+                  summary: No process to terminate
+                  value:
+                    status: success
+                    code: PROCESS_NOT_RUNNING
+                    message: "Frista.exe is not currently running"
+                    data:
+                      wasRunning: false
+        '401':
+          $ref: '#/paths/~1run_exe/get/responses/401'
+
+  /run_finger_exe:
+    get:
+      tags:
+        - Finger Automation
+      summary: Launch Finger and execute fingerprint verification
+      description: |
+        Launches Finger.exe, injects patient NOKA number, and initiates fingerprint
+        scanning workflow. Returns when scan completes or timeout occurs.
+        
+        **Process**: Launch → Inject NOKA → Display Scanner UI → Wait for Scan → Return Status
+      operationId: runFingerAutomation
+      parameters:
+        - name: no_peserta
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^\d{13}$'
+            example: "9876543210987"
+        - name: X-API-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fingerprint automation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  value:
+                    status: success
+                    code: AUTOMATION_COMPLETED
+                    message: "Fingerprint automation completed successfully"
+                    data:
+                      correlationId: "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+                      duration: 4.567
+                      processId: 54321
+                      scanResult: "Match"
+        '400':
+          $ref: '#/paths/~1run_exe/get/responses/400'
+        '401':
+          $ref: '#/paths/~1run_exe/get/responses/401'
+        '500':
+          $ref: '#/paths/~1run_exe/get/responses/500'
+        '504':
+          $ref: '#/paths/~1run_exe/get/responses/504'
+
+  /stop_finger_exe:
+    get:
+      tags:
+        - Finger Automation
+      summary: Force-terminate Finger process
+      description: |
+        Immediately terminates any running Finger.exe process. Use when application
+        is frozen or fingerprint scanner is unresponsive.
+      operationId: stopFingerProcess
+      parameters:
+        - name: X-API-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Process terminated successfully (or was not running)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                terminated:
+                  value:
+                    status: success
+                    code: PROCESS_TERMINATED
+                    message: "Finger.exe (PID 54321) terminated successfully"
+                    data:
+                      processId: 54321
+                      wasRunning: true
+        '401':
+          $ref: '#/paths/~1run_exe/get/responses/401'
+
+  /health:
+    get:
+      tags:
+        - Health & Monitoring
+      summary: Health check endpoint
+      description: |
+        Returns agent health status. Used by monitoring systems to verify service
+        is running and responsive. Always returns 200 OK if agent is operational.
+        
+        **Note**: This endpoint is optional and can be disabled in configuration.
+      operationId: getHealth
+      responses:
+        '200':
+          description: Agent is healthy and operational
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - timestamp
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2025-11-17T10:30:45.123Z"
+                  version:
+                    type: string
+                    example: "1.0.0"
+              example:
+                status: ok
+                timestamp: "2025-11-17T10:30:45.123Z"
+                version: "1.0.0"
+
+components:
+  schemas:
+    SuccessResponse:
+      type: object
+      required:
+        - status
+        - code
+        - message
+      properties:
+        status:
+          type: string
+          enum: [success]
+          description: Always "success" for successful operations
+        code:
+          type: string
+          description: Specific success code (e.g., AUTOMATION_COMPLETED, PROCESS_TERMINATED)
+          example: AUTOMATION_COMPLETED
+        message:
+          type: string
+          description: Human-readable success message for hospital IT staff
+          example: "Frista automation completed successfully"
+        data:
+          type: object
+          description: Operation-specific result data
+          properties:
+            correlationId:
+              type: string
+              format: uuid
+              description: Unique request identifier for log tracing
+            duration:
+              type: number
+              format: double
+              description: Execution time in seconds
+              example: 2.345
+            processId:
+              type: integer
+              description: Windows process ID of automated application
+              example: 12345
+
+    ErrorResponse:
+      type: object
+      required:
+        - status
+        - code
+        - message
+      properties:
+        status:
+          type: string
+          enum: [error]
+          description: Always "error" for failed operations
+        code:
+          type: string
+          description: Specific error code for programmatic handling
+          enum:
+            - CONFIG_MISSING_APPLICATION_PATH
+            - CONFIG_INVALID_CREDENTIALS
+            - CONFIG_MISSING_UI_ELEMENT_MAP
+            - CONFIG_SCHEMA_INVALID
+            - PROCESS_NOT_FOUND
+            - PROCESS_ALREADY_RUNNING
+            - PROCESS_LAUNCH_FAILED
+            - PROCESS_TERMINATED_UNEXPECTEDLY
+            - AUTOMATION_WINDOW_NOT_FOUND
+            - AUTOMATION_ELEMENT_NOT_FOUND
+            - AUTOMATION_LOGIN_FAILED
+            - AUTOMATION_VERIFICATION_TIMEOUT
+            - VALIDATION_INVALID_NOKA_FORMAT
+            - VALIDATION_MISSING_REQUIRED_FIELD
+            - TIMEOUT_WINDOW_LOAD
+            - TIMEOUT_AUTOMATION_STEP
+            - TIMEOUT_OVERALL_WORKFLOW
+            - AUTH_MISSING_API_KEY
+            - AUTH_INVALID_API_KEY
+          example: AUTOMATION_ELEMENT_NOT_FOUND
+        message:
+          type: string
+          description: Human-readable error message with corrective action guidance
+          example: "Login button could not be located. Check UI element map in config.json."
+        data:
+          type: object
+          description: Error-specific diagnostic data
+          properties:
+            correlationId:
+              type: string
+              format: uuid
+            field:
+              type: string
+              description: Field name that failed validation (for validation errors)
+            constraint:
+              type: string
+              description: Validation constraint that was violated
+            elementName:
+              type: string
+              description: UI element name that could not be found
+            lastAttempt:
+              type: string
+              description: Last selector attempt details (for debugging)
+            lastStep:
+              type: string
+              description: Last workflow step before failure
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        Optional API key authentication. Enable in config.json by setting
+        `enableApiKeyAuth: true` and specifying `apiKey` value.
+
+security:
+  - ApiKeyAuth: []

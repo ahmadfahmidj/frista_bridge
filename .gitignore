@@ -1,0 +1,94 @@
+# Sensitive configuration files
+**/config.json
+
+# .NET Build Outputs
+bin/
+obj/
+out/
+build/
+publish/
+dist/
+
+# .NET User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio files
+.vs/
+*.rsuser
+*.userprefs
+*.sln.DotSettings.user
+
+# Rider
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.csproj.user
+
+# NuGet Packages
+*.nupkg
+*.snupkg
+packages/
+paket-files/
+
+# Build Results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Test Results
+TestResults/
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+
+# .NET Logs
+*.log
+*.log.*
+logs/
+
+# Environment files
+.env
+.env.*
+*.env
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~
+
+# Encryption keys (if any)
+*.key
+*.pfx
+*.p12
+

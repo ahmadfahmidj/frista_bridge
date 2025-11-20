@@ -1,0 +1,157 @@
+{
+  // ============================================
+  // Biometric Automation Agent - Configuration
+  // ============================================
+  
+  "HttpServer": {
+    // HTTP listening address (localhost only for security)
+    "Host": "127.0.0.1",
+    
+    // Port for HTTP API (default: 5000)
+    "Port": 5000,
+    
+    // Request timeout in seconds (default: 30)
+    "RequestTimeoutSeconds": 30
+  },
+  
+  "Applications": {
+    // Configuration for Frista.exe (BPJS SIMRS application)
+    "Frista": {
+      // Full path to Frista.exe executable
+      "ExecutablePath": "C:\\Program Files\\BPJS\\Frista\\Frista.exe",
+      
+      // Maximum startup time in seconds
+      "StartupTimeoutSeconds": 10,
+      
+      // Maximum automation execution time in seconds
+      "AutomationTimeoutSeconds": 30,
+      
+      // Retry attempts for UI element detection
+      "RetryAttempts": 3,
+      
+      // Delay between retry attempts (milliseconds)
+      "RetryDelayMs": 500
+    },
+    
+    // Configuration for Finger.exe (BPJS Fingerprint application)
+    "Finger": {
+      // Full path to Finger.exe executable
+      "ExecutablePath": "C:\\Program Files\\BPJS\\Finger\\Finger.exe",
+      
+      // Maximum startup time in seconds
+      "StartupTimeoutSeconds": 10,
+      
+      // Maximum automation execution time in seconds
+      "AutomationTimeoutSeconds": 30,
+      
+      // Retry attempts for UI element detection
+      "RetryAttempts": 3,
+      
+      // Delay between retry attempts (milliseconds)
+      "RetryDelayMs": 500
+    }
+  },
+  
+  "Credentials": {
+    // IMPORTANT: Use credential encryption tool to populate these fields
+    // NEVER store plain text passwords in production
+    
+    // Encrypted username for Frista login (DPAPI protected)
+    "FristaUsername": "",
+    
+    // Encrypted password for Frista login (DPAPI protected)
+    "FristaPassword": "",
+    
+    // Encrypted username for Finger login (DPAPI protected)
+    "FingerUsername": "",
+    
+    // Encrypted password for Finger login (DPAPI protected)
+    "FingerPassword": ""
+  },
+  
+  "UIAutomation": {
+    // Primary UI element selector strategy
+    // Options: "AutomationId", "Name", "ControlType"
+    "PrimarySelectorStrategy": "AutomationId",
+    
+    // Fallback selector strategies (evaluated in order)
+    "FallbackStrategies": [ "Name", "ControlType" ],
+    
+    // Wait time for UI elements (milliseconds)
+    "ElementWaitTimeMs": 1000,
+    
+    // Maximum depth for UI tree traversal
+    "MaxTreeDepth": 10,
+    
+    // Enable UI element caching for performance
+    "EnableCaching": true,
+    
+    // Cache expiration time (seconds)
+    "CacheExpirationSeconds": 60
+  },
+  
+  "Logging": {
+    // Log file path (relative or absolute)
+    "LogPath": "logs/biometric-agent.log",
+    
+    // Minimum log level: Verbose, Debug, Information, Warning, Error, Fatal
+    "MinimumLevel": "Information",
+    
+    // Enable structured JSON logging
+    "UseStructuredLogging": true,
+    
+    // Rolling log file interval: Day, Hour, Infinite
+    "RollingInterval": "Day",
+    
+    // Maximum number of log files to retain
+    "RetainedFileCountLimit": 7,
+    
+    // Maximum log file size (bytes, null = unlimited)
+    "FileSizeLimitBytes": 104857600,
+    
+    // Enable console logging (development only)
+    "EnableConsoleLogging": true
+  },
+  
+  "Performance": {
+    // Maximum concurrent automation requests (FIFO queue)
+    "MaxConcurrentRequests": 1,
+    
+    // Queue timeout in seconds (how long requests wait)
+    "QueueTimeoutSeconds": 60,
+    
+    // Enable performance metrics collection
+    "EnableMetrics": true,
+    
+    // Performance warning threshold (seconds)
+    "WarningThresholdSeconds": 5
+  },
+  
+  "ErrorHandling": {
+    // Terminate process on critical errors
+    "TerminateOnCriticalError": true,
+    
+    // Maximum error retry attempts
+    "MaxErrorRetries": 3,
+    
+    // Error retry backoff multiplier
+    "RetryBackoffMultiplier": 2.0,
+    
+    // Screenshot on error (for debugging)
+    "CaptureScreenshotOnError": false,
+    
+    // Screenshot directory path
+    "ScreenshotPath": "logs/screenshots"
+  },
+  
+  "Health": {
+    // Health check interval (seconds)
+    "CheckIntervalSeconds": 60,
+    
+    // Maximum allowed memory usage (MB)
+    "MaxMemoryUsageMB": 200,
+    
+    // Enable automatic health reporting
+    "EnableHealthEndpoint": true
+  }
+}

@@ -31,7 +31,17 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- [ ] **Code Readability**: No files exceed 300 lines; no methods exceed 50 lines
+- [ ] **Naming**: All identifiers use full words (no abbreviations except BPJS, NOKA, HTTP, API, UI)
+- [ ] **Magic Values**: No hardcoded paths, credentials, window titles, or UI selectors
+- [ ] **Documentation**: All public APIs have XML doc comments
+- [ ] **Logging**: All automation steps emit structured logs with context
+- [ ] **Error Handling**: All errors include actionable messages and proper logging
+- [ ] **Configuration**: All environment-specific values in config.json
+- [ ] **Consistency**: HTTP endpoints follow naming patterns; JSON responses follow schema
+- [ ] **Explicitness**: No default parameters hiding behavior; all dependencies documented
+
+*If violations exist, document in Complexity Tracking section with justification.*
 
 ## Project Structure
 
