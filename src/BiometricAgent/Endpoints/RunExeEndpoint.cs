@@ -28,12 +28,12 @@ public static class RunExeEndpoint
     /// <summary>
     /// Processes Frista automation request.
     /// </summary>
-    public static async Task<IResult> HandleAsync(HttpContext context, string? bpjs)
+    public static async Task<IResult> HandleAsync(HttpContext context, string? bpjs, string? username, string? password)
     {
         var correlationId = Guid.NewGuid().ToString();
 
-        Log.Information("[{CorrelationId}] Received /run_exe request for NOKA={NOKA}",
-            correlationId, bpjs ?? "<missing>");
+        Log.Information("[{CorrelationId}] Received /run_exe request for NOKA={NOKA}, Username={Username}",
+            correlationId, bpjs ?? "<missing>", username ?? "<from-config>");
 
         // Validate NOKA parameter
         if (string.IsNullOrWhiteSpace(bpjs))
@@ -76,7 +76,9 @@ public static class RunExeEndpoint
                 NoPeserta = bpjs,
                 WorkflowType = WorkflowType.Frista,
                 ReceivedAtUtc = DateTime.UtcNow,
-                ClientIpAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown"
+                ClientIpAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                Username = username,
+                Password = password
             };
 
             Log.Information("[{CorrelationId}] Starting Frista automation workflow", correlationId);

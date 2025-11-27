@@ -29,6 +29,16 @@ public sealed class AutomationRequest
     /// IP address of client making request (for logging).
     /// </summary>
     public string ClientIpAddress { get; set; } = "127.0.0.1";
+
+    /// <summary>
+    /// Username for Frista login (optional, falls back to config if not provided).
+    /// </summary>
+    public string? Username { get; set; }
+
+    /// <summary>
+    /// Password for Frista login (optional, falls back to config if not provided).
+    /// </summary>
+    public string? Password { get; set; }
 }
 
 /// <summary>

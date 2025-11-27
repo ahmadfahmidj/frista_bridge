@@ -53,7 +53,7 @@ public sealed class FristaWorkflow
             {
                 Log.Information("[{CorrelationId}] Detected login window - performing authentication",
                     correlationId);
-                await AutoLoginAsync(correlationId);
+                await AutoLoginAsync(correlationId, request);
             }
             else
             {
@@ -323,9 +323,9 @@ public sealed class FristaWorkflow
     }
 
     /// <summary>
-    /// Step 2: Perform automatic login using configured credentials.
+    /// Step 2: Perform automatic login using credentials from request or config fallback.
     /// </summary>
-    private async Task AutoLoginAsync(string correlationId)
+    private async Task AutoLoginAsync(string correlationId, AutomationRequest request)
     {
         Log.Information("[{CorrelationId}] Performing auto-login to Frista",
             correlationId);
@@ -351,10 +351,21 @@ public sealed class FristaWorkflow
 
         Log.Debug("[{CorrelationId}] Username field found, starting keyboard-based login", correlationId);
 
+        // Determine which credentials to use (request overrides config)
+        var username = !string.IsNullOrWhiteSpace(request.Username) 
+            ? request.Username 
+            : _credentials.FristaUsername;
+        var password = !string.IsNullOrWhiteSpace(request.Password) 
+            ? request.Password 
+            : _credentials.FristaPassword;
+
+        Log.Debug("[{CorrelationId}] Using credentials: Username={Username} (Source={Source})",
+            correlationId, username, !string.IsNullOrWhiteSpace(request.Username) ? "request" : "config");
+
         // Step 1: Focus on username field and enter username
         usernameField.Focus();
         await Task.Delay(200);
-        usernameField.AsTextBox().Text = _credentials.FristaUsername;
+        usernameField.AsTextBox().Text = username;
         Log.Debug("[{CorrelationId}] Username entered", correlationId);
 
         await Task.Delay(300);
@@ -366,7 +377,7 @@ public sealed class FristaWorkflow
         await Task.Delay(300);
 
         // Step 3: Enter password
-        FlaUI.Core.Input.Keyboard.Type(_credentials.FristaPassword);
+        FlaUI.Core.Input.Keyboard.Type(password);
         Log.Debug("[{CorrelationId}] Password entered", correlationId);
 
         await Task.Delay(300);

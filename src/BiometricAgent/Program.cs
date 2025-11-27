@@ -94,8 +94,8 @@ public class Program
     private static void MapEndpoints(WebApplication app)
     {
         // Automation endpoints
-        app.MapGet("/run_exe", async (HttpContext ctx, string? bpjs) =>
-            await RunExeEndpoint.HandleAsync(ctx, bpjs));
+        app.MapGet("/run_exe", async (HttpContext ctx, string? bpjs, string? username, string? password) =>
+            await RunExeEndpoint.HandleAsync(ctx, bpjs, username, password));
 
         app.MapGet("/run_finger_exe", async (HttpContext ctx, string? bpjs) =>
             await RunFingerExeEndpoint.HandleAsync(ctx, bpjs));
