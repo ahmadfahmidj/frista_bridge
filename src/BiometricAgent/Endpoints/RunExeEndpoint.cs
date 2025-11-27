@@ -28,30 +28,30 @@ public static class RunExeEndpoint
     /// <summary>
     /// Processes Frista automation request.
     /// </summary>
-    public static async Task<IResult> HandleAsync(HttpContext context, string? noka)
+    public static async Task<IResult> HandleAsync(HttpContext context, string? bpjs)
     {
         var correlationId = Guid.NewGuid().ToString();
 
         Log.Information("[{CorrelationId}] Received /run_exe request for NOKA={NOKA}",
-            correlationId, noka ?? "<missing>");
+            correlationId, bpjs ?? "<missing>");
 
         // Validate NOKA parameter
-        if (string.IsNullOrWhiteSpace(noka))
+        if (string.IsNullOrWhiteSpace(bpjs))
         {
             Log.Warning("[{CorrelationId}] Missing NOKA parameter", correlationId);
             return Results.BadRequest(new
             {
                 success = false,
                 errorCode = ErrorCodes.ERR_MISSING_PARAMETER,
-                message = "Missing required parameter: noka",
+                message = "Missing required parameter: bpjs",
                 correlationId
             });
         }
 
         // Validate NOKA format (13 digits)
-        if (noka.Length != 13 || !noka.All(char.IsDigit))
+        if (bpjs.Length != 13 || !bpjs.All(char.IsDigit))
         {
-            Log.Warning("[{CorrelationId}] Invalid NOKA format: {NOKA}", correlationId, noka);
+            Log.Warning("[{CorrelationId}] Invalid NOKA format: {NOKA}", correlationId, bpjs);
             return Results.BadRequest(new
             {
                 success = false,
@@ -73,7 +73,7 @@ public static class RunExeEndpoint
             var request = new AutomationRequest
             {
                 CorrelationId = correlationId,
-                NoPeserta = noka,
+                NoPeserta = bpjs,
                 WorkflowType = WorkflowType.Frista,
                 ReceivedAtUtc = DateTime.UtcNow,
                 ClientIpAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown"
@@ -112,7 +112,7 @@ public static class RunExeEndpoint
             {
                 success = result.IsSuccess,
                 correlationId = result.CorrelationId,
-                noka = result.NoPeserta,
+                bpjs = result.NoPeserta,
                 durationMs = result.DurationMs,
                 message = result.Message,
                 errorCode = result.ErrorCode
@@ -126,7 +126,7 @@ public static class RunExeEndpoint
             {
                 success = false,
                 correlationId,
-                noka,
+                bpjs,
                 durationMs = 0,
                 message = "Internal server error",
                 errorCode = ErrorCodes.ERR_CRITICAL_INTERNAL

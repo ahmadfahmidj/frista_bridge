@@ -90,17 +90,17 @@ sc.exe start BiometricAgent
 
 ### Run Frista Automation
 ```http
-GET http://127.0.0.1:5000/run_exe?noka=<NOKA>
+GET http://127.0.0.1:5000/run_exe?bpjs=<BPJS_NUMBER>
 ```
 **Parameters:**
-- `noka` (required): BPJS participant number (Nomor Kartu)
+- `bpjs` (required): BPJS participant number (Nomor Kartu)
 
 **Response:**
 ```json
 {
   "success": true,
   "correlationId": "abc-123-def",
-  "noka": "0001234567890",
+  "bpjs": "0001234567890",
   "durationMs": 2345,
   "message": "Automation completed successfully",
   "errorCode": null
@@ -109,7 +109,7 @@ GET http://127.0.0.1:5000/run_exe?noka=<NOKA>
 
 ### Run Finger Automation
 ```http
-GET http://127.0.0.1:5000/run_finger_exe?noka=<NOKA>
+GET http://127.0.0.1:5000/run_finger_exe?bpjs=<BPJS_NUMBER>
 ```
 *Same parameters and response as /run_exe*
 
@@ -166,7 +166,7 @@ GET http://127.0.0.1:5000/health
 | `ERR_UI_ELEMENT_NOT_FOUND` | UI Automation | Required UI element missing |
 | `ERR_AUTOMATION_TIMEOUT` | UI Automation | Automation exceeded timeout |
 | `ERR_QUEUE_TIMEOUT` | Queueing | Request timed out in queue |
-| `ERR_INVALID_NOKA` | Validation | Invalid NOKA format |
+| `ERR_INVALID_BPJS` | Validation | Invalid BPJS number format |
 | `ERR_CRITICAL_INTERNAL` | System | Unrecoverable internal error |
 
 ## Configuration Reference
@@ -196,7 +196,7 @@ Logs are written to `logs/biometric-agent.log` in structured JSON format.
   "@mt": "Automation completed",
   "@l": "Information",
   "CorrelationId": "abc-123-def",
-  "NOKA": "0001234567890",
+  "BPJS": "0001234567890",
   "DurationMs": 2345,
   "WorkflowType": "Frista",
   "Success": true

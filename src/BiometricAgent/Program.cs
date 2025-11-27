@@ -43,7 +43,21 @@ public class Program
             // Add Serilog to ASP.NET Core
             builder.Services.AddSerilog();
 
+            // Add CORS services
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowKiosk", policy =>
+                {
+                    policy.AllowAnyOrigin()
+                          .AllowAnyMethod()
+                          .AllowAnyHeader();
+                });
+            });
+
             var app = builder.Build();
+
+            // Use CORS middleware
+            app.UseCors("AllowKiosk");
 
             // Map HTTP endpoints
             MapEndpoints(app);
@@ -80,11 +94,11 @@ public class Program
     private static void MapEndpoints(WebApplication app)
     {
         // Automation endpoints
-        app.MapGet("/run_exe", async (HttpContext ctx, string? noka) =>
-            await RunExeEndpoint.HandleAsync(ctx, noka));
+        app.MapGet("/run_exe", async (HttpContext ctx, string? bpjs) =>
+            await RunExeEndpoint.HandleAsync(ctx, bpjs));
 
-        app.MapGet("/run_finger_exe", async (HttpContext ctx, string? noka) =>
-            await RunFingerExeEndpoint.HandleAsync(ctx, noka));
+        app.MapGet("/run_finger_exe", async (HttpContext ctx, string? bpjs) =>
+            await RunFingerExeEndpoint.HandleAsync(ctx, bpjs));
 
         // Process control endpoints
         app.MapGet("/stop_exe", async (HttpContext ctx) =>

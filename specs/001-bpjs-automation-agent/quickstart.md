@@ -138,16 +138,16 @@ Invoke-RestMethod http://127.0.0.1:5000/health
 ### Manual Test: Frista Automation
 
 ```powershell
-# Send automation request (replace NOKA with valid test number)
+# Send automation request (replace with valid test BPJS number)
 Invoke-RestMethod "http://127.0.0.1:5000/run_exe?no_peserta=1234567890123"
 
 # Watch agent console for logs:
-# [12:01:00 INF] Request received: CorrelationId=abc123, WorkflowType=Frista, NOKA=1234567890123
+# [12:01:00 INF] Request received: CorrelationId=abc123, WorkflowType=Frista, BPJS=1234567890123
 # [12:01:00 INF] Launching process: C:\Path\To\Frista.exe
 # [12:01:01 INF] Window found: "FRISTA - BPJS Kesehatan" (PID 12345)
 # [12:01:01 INF] Step: Login - Locating element: LoginButton
 # [12:01:01 INF] Step: Login - Element found (AutomationId: btnLogin)
-# [12:01:02 INF] Step: InjectNoka - Populating field with NOKA
+# [12:01:02 INF] Step: InjectBpjs - Populating field with BPJS number
 # [12:01:02 INF] Step: TriggerVerification - Clicking verify button
 # [12:01:03 INF] Automation completed in 2.345s
 
@@ -202,7 +202,7 @@ dotnet test tests/BiometricAgent.UnitTests
 **Unit Test Coverage**:
 - ✓ Configuration validation logic
 - ✓ Request queue ordering (FIFO)
-- ✓ NOKA format validation
+- ✓ BPJS number format validation
 - ✓ Error code mapping
 - ✓ Credential encryption/decryption
 
@@ -312,7 +312,7 @@ spectral lint specs/001-bpjs-automation-agent/contracts/openapi.yaml
 # Valid request (should return 200)
 Invoke-RestMethod "http://127.0.0.1:5000/run_exe?no_peserta=1234567890123"
 
-# Invalid NOKA (should return 400)
+# Invalid BPJS number (should return 400)
 Invoke-RestMethod "http://127.0.0.1:5000/run_exe?no_peserta=12345" -ErrorAction SilentlyContinue
 
 # Missing parameter (should return 400)

@@ -5,7 +5,7 @@
 
 ## Summary
 
-Build a lightweight HTTP service that automates BPJS biometric applications (Frista.exe and Finger.exe) for hospital systems. The agent exposes REST endpoints that trigger UI automation workflows, eliminating manual operator intervention for patient biometric verification at registration desks, kiosks, and telemedicine platforms. Core capability: receive NOKA number via HTTP → launch BPJS app → auto-login → inject patient data → trigger verification → return status.
+Build a lightweight HTTP service that automates BPJS biometric applications (Frista.exe and Finger.exe) for hospital systems. The agent exposes REST endpoints that trigger UI automation workflows, eliminating manual operator intervention for patient biometric verification at registration desks, kiosks, and telemedicine platforms. Core capability: receive BPJS number via HTTP → launch BPJS app → auto-login → inject patient data → trigger verification → return status.
 
 Technical approach: ASP.NET Core Minimal API for HTTP layer + FlaUI (UIA3) for deterministic Windows UI automation + Serilog for structured logging + JSON-based configuration. Single-process console application deployable as Windows Service for 24/7 kiosk operation.
 
@@ -26,7 +26,7 @@ Technical approach: ASP.NET Core Minimal API for HTTP layer + FlaUI (UIA3) for d
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
 - [ ] **Code Readability**: No files exceed 300 lines; no methods exceed 50 lines
-- [ ] **Naming**: All identifiers use full words (no abbreviations except BPJS, NOKA, HTTP, API, UI)
+- [ ] **Naming**: All identifiers use full words (no abbreviations except BPJS, HTTP, API, UI)
 - [ ] **Magic Values**: No hardcoded paths, credentials, window titles, or UI selectors
 - [ ] **Documentation**: All public APIs have XML doc comments
 - [ ] **Logging**: All automation steps emit structured logs with context

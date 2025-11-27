@@ -32,7 +32,8 @@ public sealed class FristaWorkflow
     }
 
     /// <summary>
-    /// Executes the complete Frista automation workflow.
+    /// Executes the complete Frista automation workflow with intelligent state detection.
+    /// Detects if app is already running and determines current window state (login vs main).
     /// </summary>
     public async Task<AutomationResult> ExecuteAsync(AutomationRequest request)
     {
@@ -44,11 +45,21 @@ public sealed class FristaWorkflow
 
         try
         {
-            // Step 1: Launch Frista.exe
-            await LaunchFristaAsync(correlationId);
+            // Step 1: Launch Frista.exe or attach to existing process
+            var windowState = await LaunchOrAttachFristaAsync(correlationId);
 
-            // Step 2: Perform auto-login
-            await AutoLoginAsync(correlationId);
+            // Step 2: Perform auto-login (only if on login window)
+            if (windowState == WindowState.LoginWindow)
+            {
+                Log.Information("[{CorrelationId}] Detected login window - performing authentication",
+                    correlationId);
+                await AutoLoginAsync(correlationId);
+            }
+            else
+            {
+                Log.Information("[{CorrelationId}] Detected main window - skipping authentication",
+                    correlationId);
+            }
 
             // Step 3: Inject NOKA into input field
             await InjectNokaAsync(correlationId, request.NoPeserta);
@@ -94,11 +105,56 @@ public sealed class FristaWorkflow
     }
 
     /// <summary>
-    /// Step 1: Launch Frista.exe and wait for main window.
+    /// Window state enumeration for intelligent workflow branching.
     /// </summary>
-    private async Task LaunchFristaAsync(string correlationId)
+    private enum WindowState
     {
-        Log.Information("[{CorrelationId}] Launching Frista from {Path}",
+        LoginWindow,
+        MainWindow
+    }
+
+    /// <summary>
+    /// Step 1: Close any existing Frista processes and launch a fresh instance.
+    /// </summary>
+    private async Task<WindowState> LaunchOrAttachFristaAsync(string correlationId)
+    {
+        // Initialize FlaUI automation
+        _automation = new UIA3Automation();
+
+        // Check if Frista is already running and close it
+        var existingProcesses = Process.GetProcessesByName("frista")
+            .Concat(Process.GetProcessesByName("Frista"))
+            .ToArray();
+
+        if (existingProcesses.Length > 0)
+        {
+            Log.Information("[{CorrelationId}] Found {Count} existing Frista process(es), terminating them before starting new instance",
+                correlationId, existingProcesses.Length);
+
+            foreach (var existingProcess in existingProcesses)
+            {
+                try
+                {
+                    Log.Debug("[{CorrelationId}] Terminating Frista process PID={ProcessId}",
+                        correlationId, existingProcess.Id);
+                    existingProcess.Kill();
+                    existingProcess.WaitForExit(2000); // Wait up to 2 seconds for clean exit
+                    Log.Information("[{CorrelationId}] Frista process PID={ProcessId} terminated",
+                        correlationId, existingProcess.Id);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "[{CorrelationId}] Failed to terminate Frista process PID={ProcessId}",
+                        correlationId, existingProcess.Id);
+                }
+            }
+
+            // Wait a moment for processes to fully terminate
+            await Task.Delay(500);
+        }
+
+        // Not running, launch new instance
+        Log.Information("[{CorrelationId}] Frista not running, launching from {Path}",
             correlationId, _config.ExecutablePath);
 
         if (!File.Exists(_config.ExecutablePath))
@@ -123,14 +179,9 @@ public sealed class FristaWorkflow
         Log.Information("[{CorrelationId}] Frista process started with PID={ProcessId}",
             correlationId, _process.Id);
 
-        // Initialize FlaUI automation
-        _automation = new UIA3Automation();
-
-        // Wait for main window to appear
+        // Wait for window to appear
         var timeout = TimeSpan.FromSeconds(_config.StartupTimeoutSeconds);
         var endTime = DateTime.UtcNow.Add(timeout);
-
-        Window? mainWindow = null;
 
         while (DateTime.UtcNow < endTime)
         {
@@ -140,12 +191,14 @@ public sealed class FristaWorkflow
 
                 if (element != null)
                 {
-                    mainWindow = element.AsWindow();
-                    if (mainWindow != null && !string.IsNullOrEmpty(mainWindow.Title))
+                    var window = element.AsWindow();
+                    if (window != null && !string.IsNullOrEmpty(window.Title))
                     {
-                        Log.Information("[{CorrelationId}] Frista main window detected: {WindowTitle}",
-                            correlationId, mainWindow.Title);
-                        return;
+                        Log.Information("[{CorrelationId}] Frista window detected: {WindowTitle}",
+                            correlationId, window.Title);
+
+                        // Detect window state
+                        return await DetectWindowStateAsync(correlationId);
                     }
                 }
             }
@@ -157,7 +210,116 @@ public sealed class FristaWorkflow
             await Task.Delay(500);
         }
 
-        throw new TimeoutException($"Frista main window did not appear within {timeout.TotalSeconds} seconds");
+        throw new TimeoutException($"Frista window did not appear within {timeout.TotalSeconds} seconds");
+    }
+
+    /// <summary>
+    /// Detects the current window state (Login vs Main) based on window title and UI elements.
+    /// </summary>
+    private async Task<WindowState> DetectWindowStateAsync(string correlationId)
+    {
+        if (_automation == null || _process == null)
+        {
+            throw new InvalidOperationException("Automation not initialized");
+        }
+
+        await Task.Delay(500); // Allow UI to stabilize
+
+        var window = _automation.GetDesktop().FindFirstChild(cf => cf.ByProcessId(_process.Id));
+
+        if (window == null)
+        {
+            throw new InvalidOperationException("Frista window not found");
+        }
+
+        var windowTitle = window.Name?.ToLower() ?? string.Empty;
+
+        // Strategy 1: Check window title for "login" keyword
+        if (windowTitle.Contains("login"))
+        {
+            Log.Information("[{CorrelationId}] Window state detected: LOGIN (based on title '{WindowTitle}')",
+                correlationId, window.Name);
+            return WindowState.LoginWindow;
+        }
+
+        // Strategy 2: Look for login-specific UI elements (username/password fields)
+        var usernameField = window.FindFirstDescendant(cf => 
+            cf.ByClassName("TkChild").And(cf.ByControlType(ControlType.Pane)));
+
+        var loginButton = window.FindFirstDescendant(cf => 
+            cf.ByClassName("Button").And(cf.ByControlType(ControlType.Button)));
+
+        if (usernameField != null && loginButton != null)
+        {
+            Log.Information("[{CorrelationId}] Window state detected: LOGIN (found username field and login button)",
+                correlationId);
+            return WindowState.LoginWindow;
+        }
+
+        // Strategy 3: If no login indicators, assume main window
+        Log.Information("[{CorrelationId}] Window state detected: MAIN (no login indicators found, title '{WindowTitle}')",
+            correlationId, window.Name);
+        return WindowState.MainWindow;
+    }
+
+    /// <summary>
+    /// Brings the Frista window to the foreground, activating it if minimized or in background.
+    /// </summary>
+    private async Task BringWindowToFrontAsync(string correlationId)
+    {
+        if (_automation == null || _process == null)
+        {
+            throw new InvalidOperationException("Automation not initialized");
+        }
+
+        try
+        {
+            var window = _automation.GetDesktop().FindFirstChild(cf => cf.ByProcessId(_process.Id));
+
+            if (window == null)
+            {
+                Log.Warning("[{CorrelationId}] Could not find Frista window to bring to front", correlationId);
+                return;
+            }
+
+            var mainWindow = window.AsWindow();
+            
+            if (mainWindow != null)
+            {
+                // Check if window is minimized and restore it
+                try
+                {
+                    var windowPattern = mainWindow.Patterns.Window.PatternOrDefault;
+                    if (windowPattern != null)
+                    {
+                        var state = windowPattern.WindowVisualState.Value;
+                        if (state == FlaUI.Core.Definitions.WindowVisualState.Minimized)
+                        {
+                            Log.Information("[{CorrelationId}] Restoring minimized Frista window", correlationId);
+                            windowPattern.SetWindowVisualState(FlaUI.Core.Definitions.WindowVisualState.Normal);
+                            await Task.Delay(300); // Wait for restore animation
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug(ex, "[{CorrelationId}] Could not check/restore window state, continuing", correlationId);
+                }
+
+                // Bring to foreground
+                Log.Information("[{CorrelationId}] Bringing Frista window to foreground: '{WindowTitle}'",
+                    correlationId, mainWindow.Title);
+                mainWindow.SetForeground();
+                await Task.Delay(200); // Wait for focus
+
+                Log.Information("[{CorrelationId}] Frista window activated successfully", correlationId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[{CorrelationId}] Failed to bring Frista window to front, continuing anyway", correlationId);
+            // Don't throw - window activation is best-effort
+        }
     }
 
     /// <summary>

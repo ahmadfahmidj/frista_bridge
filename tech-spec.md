@@ -4,7 +4,7 @@
 
 The Biometric Automation Agent is a lightweight, self-hosted automation service designed to integrate legacy BPJS biometric applications (`Frista.exe` and `Finger.exe`) into modern hospital systems such as SIMRS, APM, and telemedicine platforms.
 
-It exposes a secure local HTTP interface, orchestrates UI automation through FlaUI, and enables seamless, programmatic submission of BPJS participant numbers (NOKA) and biometric triggers without manual operator intervention. This specification outlines the product vision, system architecture, feature set, user journeys, and operational requirements to ensure predictable automation outcomes across hospital endpoints.
+It exposes a secure local HTTP interface, orchestrates UI automation through FlaUI, and enables seamless, programmatic submission of BPJS participant numbers and biometric triggers without manual operator intervention. This specification outlines the product vision, system architecture, feature set, user journeys, and operational requirements to ensure predictable automation outcomes across hospital endpoints.
 
 ## 2. Product Goals
 
@@ -85,7 +85,7 @@ Telemedicine / SIMRS / Kiosk
 - Automate login using securely stored credentials.
 - Validate post-login UI state before continuing automation.
 
-### 4.2 Participant Number Injection (NOKA)
+### 4.2 Participant Number Injection
 
 - Identify the correct input field.
 - Inject participant numbers with sanitized keystrokes.
@@ -126,7 +126,7 @@ Telemedicine / SIMRS / Kiosk
 2. SIMRS sends `GET http://127.0.0.1:5000/run_exe?no_peserta=1234567890`.
 3. The Automation Agent launches Frista.
 4. The agent auto-logs in.
-5. The agent enters the NOKA.
+5. The agent enters the BPJS participant number.
 6. The agent triggers verification.
 7. Frista displays the biometric result (manual sensor interaction).
 8. The hospital system polls status or waits for operator confirmation.

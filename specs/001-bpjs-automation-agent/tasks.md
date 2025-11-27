@@ -88,18 +88,18 @@
 
 **Goal**: Enable SIMRS to trigger Frista automation via HTTP endpoint, eliminating manual operator intervention for biometric verification at registration desks.
 
-**Independent Test**: Send `GET /run_exe?no_peserta=1234567890123` → Frista launches, logs in, populates NOKA, displays verification → Returns success JSON
+**Independent Test**: Send `GET /run_exe?bpjs=1234567890123` → Frista launches, logs in, populates BPJS number, displays verification → Returns success JSON
 
 ### Implementation for User Story 1
 
 - [X] T029 [US1] Create FristaWorkflow class in `src/BiometricAgent/Automation/FristaWorkflow.cs` implementing IAutomationWorkflow
 - [X] T030 [US1] Implement LaunchFrista step in FristaWorkflow (process launch + window detection)
 - [X] T031 [US1] Implement AutoLogin step in FristaWorkflow (locate username/password fields, fill, click login, validate post-login UI)
-- [X] T032 [US1] Implement InjectNoka step in FristaWorkflow (locate NOKA input field, inject participant number)
+- [X] T032 [US1] Implement InjectBpjs step in FristaWorkflow (locate BPJS number input field, inject participant number)
 - [X] T033 [US1] Implement TriggerVerification step in FristaWorkflow (locate verify button, click, wait for result)
 - [X] T034 [US1] Add timeout handling and error recovery in FristaWorkflow (30 second overall timeout, step-level timeouts)
 - [X] T035 [US1] Create FristaEndpoints in `src/BiometricAgent/Endpoints/FristaEndpoints.cs`
-- [X] T036 [US1] Implement GET /run_exe endpoint with NOKA validation and workflow execution
+- [X] T036 [US1] Implement GET /run_exe endpoint with BPJS number validation and workflow execution
 - [X] T037 [US1] Add structured logging for all Frista workflow steps (step name, duration, element selectors, outcomes)
 - [X] T038 [US1] Add error response mapping (ErrorCode enum → JSON response with actionable messages)
 
@@ -117,11 +117,11 @@
 
 - [X] T039 [P] [US2] Create FingerWorkflow class in `src/BiometricAgent/Automation/FingerWorkflow.cs` implementing IAutomationWorkflow
 - [X] T040 [US2] Implement LaunchFinger step in FingerWorkflow (process launch + window detection)
-- [X] T041 [US2] Implement InjectNoka step in FingerWorkflow (locate NOKA input, populate field)
+- [X] T041 [US2] Implement InjectBpjs step in FingerWorkflow (locate BPJS number input, populate field)
 - [X] T042 [US2] Implement InitiateFingerprint step in FingerWorkflow (trigger scanner UI, wait for scan completion)
 - [X] T043 [US2] Add timeout and error handling in FingerWorkflow (handle scanner hardware errors, no-match scenarios)
 - [X] T044 [US2] Create FingerEndpoints in `src/BiometricAgent/Endpoints/FingerEndpoints.cs`
-- [X] T045 [US2] Implement GET /run_finger_exe endpoint with NOKA validation and workflow execution
+- [X] T045 [US2] Implement GET /run_finger_exe endpoint with BPJS number validation and workflow execution
 - [X] T046 [US2] Add structured logging for all Finger workflow steps
 - [X] T047 [US2] Add user-friendly error messages for kiosk display (scanner not ready, no match, retry instructions)
 
@@ -185,7 +185,7 @@
 - [ ] T062 [P] Create BiometricAgent.UnitTests project with xUnit and FakeItEasy
 - [ ] T063 [P] Write ConfigurationValidator tests (valid config, missing fields, invalid paths, credential decryption)
 - [ ] T064 [P] Write RequestQueue tests (FIFO ordering, concurrent enqueue, timeout handling)
-- [ ] T065 [P] Write AutomationRequest validation tests (NOKA format, correlation ID uniqueness)
+- [ ] T065 [P] Write AutomationRequest validation tests (BPJS number format, correlation ID uniqueness)
 - [ ] T066 [P] Write ErrorCode mapping tests (all error codes have messages, codes are unique)
 - [ ] T067 [P] Write CredentialEncryption tests (encrypt/decrypt round-trip, invalid ciphertext handling)
 
@@ -228,7 +228,7 @@
 ### Security Hardening
 
 - [ ] T086 [P] Verify credentials never logged in plaintext
-- [ ] T087 [P] Verify NOKA values not persisted beyond request lifecycle
+- [ ] T087 [P] Verify BPJS numbers not persisted beyond request lifecycle
 - [ ] T088 [P] Verify API key authentication works when enabled
 
 ### Operational Readiness
@@ -270,7 +270,7 @@
 
 **User Story 2 (Finger)**:
 - T039-T041 can run in parallel (different files)
-- T042 depends on T040-T041 (needs NOKA injection before fingerprint)
+- T042 depends on T040-T041 (needs BPJS number injection before fingerprint)
 - T043-T047 follow sequentially
 
 **User Story 3 (Queueing)**:

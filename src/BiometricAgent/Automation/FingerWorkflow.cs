@@ -33,7 +33,8 @@ public sealed class FingerWorkflow
     }
 
     /// <summary>
-    /// Executes the complete Finger automation workflow.
+    /// Executes the complete Finger automation workflow with intelligent state detection.
+    /// Detects if app is already running and determines current window state (login vs main).
     /// </summary>
     public async Task<AutomationResult> ExecuteAsync(AutomationRequest request)
     {
@@ -45,11 +46,21 @@ public sealed class FingerWorkflow
 
         try
         {
-            // Step 1: Launch After.exe
-            await LaunchFingerAsync(correlationId);
+            // Step 1: Launch After.exe or attach to existing process
+            var windowState = await LaunchOrAttachFingerAsync(correlationId);
 
-            // Step 2: Perform auto-login (if needed)
-            await AutoLoginAsync(correlationId);
+            // Step 2: Perform auto-login (only if on login window)
+            if (windowState == WindowState.LoginWindow)
+            {
+                Log.Information("[{CorrelationId}] Detected login window - performing authentication",
+                    correlationId);
+                await AutoLoginAsync(correlationId);
+            }
+            else
+            {
+                Log.Information("[{CorrelationId}] Detected main window - skipping authentication",
+                    correlationId);
+            }
 
             // Step 3: Inject NOKA into input field
             await InjectNokaAsync(correlationId, request.NoPeserta);
@@ -95,11 +106,56 @@ public sealed class FingerWorkflow
     }
 
     /// <summary>
-    /// Step 1: Launch After.exe and wait for main window.
+    /// Window state enumeration for intelligent workflow branching.
     /// </summary>
-    private async Task LaunchFingerAsync(string correlationId)
+    private enum WindowState
     {
-        Log.Information("[{CorrelationId}] Launching Finger from {Path}",
+        LoginWindow,
+        MainWindow
+    }
+
+    /// <summary>
+    /// Step 1: Close any existing Finger processes and launch a fresh instance.
+    /// </summary>
+    private async Task<WindowState> LaunchOrAttachFingerAsync(string correlationId)
+    {
+        // Initialize FlaUI automation
+        _automation = new UIA3Automation();
+
+        // Check if After (Finger) is already running and close it
+        var existingProcesses = Process.GetProcessesByName("After")
+            .Concat(Process.GetProcessesByName("after"))
+            .ToArray();
+
+        if (existingProcesses.Length > 0)
+        {
+            Log.Information("[{CorrelationId}] Found {Count} existing Finger process(es), terminating them before starting new instance",
+                correlationId, existingProcesses.Length);
+
+            foreach (var existingProcess in existingProcesses)
+            {
+                try
+                {
+                    Log.Debug("[{CorrelationId}] Terminating Finger process PID={ProcessId}",
+                        correlationId, existingProcess.Id);
+                    existingProcess.Kill();
+                    existingProcess.WaitForExit(2000); // Wait up to 2 seconds for clean exit
+                    Log.Information("[{CorrelationId}] Finger process PID={ProcessId} terminated",
+                        correlationId, existingProcess.Id);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "[{CorrelationId}] Failed to terminate Finger process PID={ProcessId}",
+                        correlationId, existingProcess.Id);
+                }
+            }
+
+            // Wait a moment for processes to fully terminate
+            await Task.Delay(500);
+        }
+
+        // Not running, launch new instance
+        Log.Information("[{CorrelationId}] Finger not running, launching from {Path}",
             correlationId, _config.ExecutablePath);
 
         if (!File.Exists(_config.ExecutablePath))
@@ -124,14 +180,9 @@ public sealed class FingerWorkflow
         Log.Information("[{CorrelationId}] Finger process started with PID={ProcessId}",
             correlationId, _process.Id);
 
-        // Initialize FlaUI automation
-        _automation = new UIA3Automation();
-
-        // Wait for main window to appear
+        // Wait for window to appear
         var timeout = TimeSpan.FromSeconds(_config.StartupTimeoutSeconds);
         var endTime = DateTime.UtcNow.Add(timeout);
-
-        Window? mainWindow = null;
 
         while (DateTime.UtcNow < endTime)
         {
@@ -141,12 +192,14 @@ public sealed class FingerWorkflow
 
                 if (element != null)
                 {
-                    mainWindow = element.AsWindow();
-                    if (mainWindow != null && !string.IsNullOrEmpty(mainWindow.Title))
+                    var window = element.AsWindow();
+                    if (window != null && !string.IsNullOrEmpty(window.Title))
                     {
-                        Log.Information("[{CorrelationId}] Finger main window detected: {WindowTitle}",
-                            correlationId, mainWindow.Title);
-                        return;
+                        Log.Information("[{CorrelationId}] Finger window detected: {WindowTitle}",
+                            correlationId, window.Title);
+
+                        // Detect window state
+                        return await DetectWindowStateAsync(correlationId);
                     }
                 }
             }
@@ -158,7 +211,141 @@ public sealed class FingerWorkflow
             await Task.Delay(500);
         }
 
-        throw new TimeoutException($"Finger main window did not appear within {timeout.TotalSeconds} seconds");
+        throw new TimeoutException($"Finger window did not appear within {timeout.TotalSeconds} seconds");
+    }
+
+    /// <summary>
+    /// Detects the current window state (Login vs Main) based on window title and UI elements.
+    /// </summary>
+    private async Task<WindowState> DetectWindowStateAsync(string correlationId)
+    {
+        if (_automation == null || _process == null)
+        {
+            throw new InvalidOperationException("Automation not initialized");
+        }
+
+        await Task.Delay(500); // Allow UI to stabilize
+
+        var window = _automation.GetDesktop().FindFirstChild(cf => cf.ByProcessId(_process.Id));
+
+        if (window == null)
+        {
+            throw new InvalidOperationException("Finger window not found");
+        }
+
+        var windowTitle = window.Name?.ToLower() ?? string.Empty;
+
+        // Strategy 1: Check window title for "login" keyword
+        if (windowTitle.Contains("login"))
+        {
+            Log.Information("[{CorrelationId}] Window state detected: LOGIN (based on title '{WindowTitle}')",
+                correlationId, window.Name);
+            return WindowState.LoginWindow;
+        }
+
+        // Strategy 2: Look for login-specific UI elements (username/password fields)
+        // Check for TkChild input fields which typically indicate login screen
+        var loginFields = window.FindAllDescendants(cf => 
+            cf.ByClassName("TkChild").And(cf.ByControlType(ControlType.Pane)));
+
+        // Check for button that might be login button
+        var buttons = window.FindAllDescendants(cf => 
+            cf.ByClassName("Button").And(cf.ByControlType(ControlType.Button)));
+
+        // If we have 2+ TkChild fields (username/password) and buttons, likely login screen
+        if (loginFields.Length >= 2 && buttons.Length > 0)
+        {
+            Log.Information("[{CorrelationId}] Window state detected: LOGIN (found {FieldCount} input fields and {ButtonCount} buttons)",
+                correlationId, loginFields.Length, buttons.Length);
+            return WindowState.LoginWindow;
+        }
+
+        // Strategy 3: Look for NOKA input field which indicates main window
+        // Main window typically has text input for NOKA entry
+        var textBoxes = window.FindAllDescendants(cf => cf.ByControlType(ControlType.Edit));
+        
+        if (textBoxes.Length > 0)
+        {
+            Log.Information("[{CorrelationId}] Window state detected: MAIN (found {TextBoxCount} text input fields, likely NOKA entry)",
+                correlationId, textBoxes.Length);
+            return WindowState.MainWindow;
+        }
+
+        // Strategy 4: If no clear indicators, check if we have many interactive elements (main window)
+        // vs few elements (login screen)
+        var allButtons = window.FindAllDescendants(cf => cf.ByControlType(ControlType.Button));
+        
+        if (allButtons.Length > 3)
+        {
+            Log.Information("[{CorrelationId}] Window state detected: MAIN (found {ButtonCount} buttons, likely main interface)",
+                correlationId, allButtons.Length);
+            return WindowState.MainWindow;
+        }
+
+        // Default: Assume login window if unclear
+        Log.Information("[{CorrelationId}] Window state detected: LOGIN (default assumption, title '{WindowTitle}')",
+            correlationId, window.Name);
+        return WindowState.LoginWindow;
+    }
+
+    /// <summary>
+    /// Brings the Finger window to the foreground, activating it if minimized or in background.
+    /// </summary>
+    private async Task BringWindowToFrontAsync(string correlationId)
+    {
+        if (_automation == null || _process == null)
+        {
+            throw new InvalidOperationException("Automation not initialized");
+        }
+
+        try
+        {
+            var window = _automation.GetDesktop().FindFirstChild(cf => cf.ByProcessId(_process.Id));
+
+            if (window == null)
+            {
+                Log.Warning("[{CorrelationId}] Could not find Finger window to bring to front", correlationId);
+                return;
+            }
+
+            var mainWindow = window.AsWindow();
+            
+            if (mainWindow != null)
+            {
+                // Check if window is minimized and restore it
+                try
+                {
+                    var windowPattern = mainWindow.Patterns.Window.PatternOrDefault;
+                    if (windowPattern != null)
+                    {
+                        var state = windowPattern.WindowVisualState.Value;
+                        if (state == FlaUI.Core.Definitions.WindowVisualState.Minimized)
+                        {
+                            Log.Information("[{CorrelationId}] Restoring minimized Finger window", correlationId);
+                            windowPattern.SetWindowVisualState(FlaUI.Core.Definitions.WindowVisualState.Normal);
+                            await Task.Delay(300); // Wait for restore animation
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug(ex, "[{CorrelationId}] Could not check/restore window state, continuing", correlationId);
+                }
+
+                // Bring to foreground
+                Log.Information("[{CorrelationId}] Bringing Finger window to foreground: '{WindowTitle}'",
+                    correlationId, mainWindow.Title);
+                mainWindow.SetForeground();
+                await Task.Delay(200); // Wait for focus
+
+                Log.Information("[{CorrelationId}] Finger window activated successfully", correlationId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[{CorrelationId}] Failed to bring Finger window to front, continuing anyway", correlationId);
+            // Don't throw - window activation is best-effort
+        }
     }
 
     /// <summary>

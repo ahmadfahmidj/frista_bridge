@@ -3,21 +3,21 @@
 **Feature Branch**: `001-bpjs-automation-agent`  
 **Created**: 2025-11-17  
 **Status**: Draft  
-**Input**: User description: "The Biometric Automation Agent is a lightweight, self-hosted automation service designed to integrate legacy BPJS biometric applications (Frista.exe and Finger.exe) into modern hospital systems such as SIMRS, APM, and telemedicine platforms. It exposes a secure local HTTP interface, orchestrates UI automation through FlaUI, and enables seamless, programmatic submission of BPJS participant numbers (NOKA) and biometric triggers without manual operator intervention."
+**Input**: User description: "The Biometric Automation Agent is a lightweight, self-hosted automation service designed to integrate legacy BPJS biometric applications (Frista.exe and Finger.exe) into modern hospital systems such as SIMRS, APM, and telemedicine platforms. It exposes a secure local HTTP interface, orchestrates UI automation through FlaUI, and enables seamless, programmatic submission of BPJS participant numbers and biometric triggers without manual operator intervention."
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - SIMRS Biometric Verification (Priority: P1) 🎯 MVP
 
-Hospital registration desk staff need to verify BPJS patient eligibility through biometric checks without manually launching or interacting with the Frista application. When a patient arrives for registration, the SIMRS system should automatically trigger biometric verification by sending the patient's NOKA number to the automation agent.
+Hospital registration desk staff need to verify BPJS patient eligibility through biometric checks without manually launching or interacting with the Frista application. When a patient arrives for registration, the SIMRS system should automatically trigger biometric verification by sending the patient's BPJS number to the automation agent.
 
 **Why this priority**: Core use case that directly addresses the primary pain point - eliminating manual operator intervention for routine biometric checks at registration desks. Delivers immediate value by reducing registration time and operator workload.
 
-**Independent Test**: Can be fully tested by sending an HTTP GET request with a valid NOKA number to the agent's endpoint. Success is verified when Frista launches, logs in automatically, populates the NOKA field, and displays verification results without any manual interaction.
+**Independent Test**: Can be fully tested by sending an HTTP GET request with a valid BPJS number to the agent's endpoint. Success is verified when Frista launches, logs in automatically, populates the BPJS number field, and displays verification results without any manual interaction.
 
 **Acceptance Scenarios**:
 
-1. **Given** SIMRS has a patient with NOKA "1234567890" ready for registration, **When** SIMRS sends `GET /run_exe?no_peserta=1234567890`, **Then** Frista launches, auto-logs in, populates NOKA field, triggers verification, and displays biometric data within 3 seconds
+1. **Given** SIMRS has a patient with BPJS number "1234567890" ready for registration, **When** SIMRS sends `GET /run_exe?bpjs=1234567890`, **Then** Frista launches, auto-logs in, populates BPJS number field, triggers verification, and displays biometric data within 3 seconds
 2. **Given** Frista is not running, **When** automation request is received, **Then** agent launches Frista from configured path, waits for main window to appear, and proceeds with automation
 3. **Given** login credentials are configured, **When** Frista main window appears, **Then** agent automatically fills username and password fields, clicks login button, and validates successful login before proceeding
 4. **Given** verification is complete, **When** SIMRS requests status, **Then** agent returns success response with execution time metadata
@@ -34,7 +34,7 @@ Patients using self-service kiosks (Anjungan Mandiri Pasien) need to complete fi
 
 **Acceptance Scenarios**:
 
-1. **Given** patient at kiosk has entered NOKA "9876543210", **When** kiosk sends `GET /run_finger_exe?no_peserta=9876543210`, **Then** Finger.exe launches, displays fingerprint scanner prompt, and waits for patient interaction
+1. **Given** patient at kiosk has entered BPJS number "9876543210", **When** kiosk sends `GET /run_finger_exe?bpjs=9876543210`, **Then** Finger.exe launches, displays fingerprint scanner prompt, and waits for patient interaction
 2. **Given** fingerprint scan is in progress, **When** patient places finger on scanner, **Then** application processes biometric data and displays verification result within 5 seconds
 3. **Given** verification is successful, **When** kiosk polls for status, **Then** agent returns success indicator with patient verification data
 4. **Given** verification fails (wrong finger or no match), **When** error occurs, **Then** agent returns user-friendly error message instructing patient to retry or seek staff assistance
@@ -81,7 +81,7 @@ Operators need the ability to force-close stuck or frozen BPJS applications when
 
 - **What happens when Windows is locked or screen is off** during automation? Agent should detect locked session state before attempting automation and return error indicating operator intervention required to unlock workstation.
 
-- **What happens when concurrent requests arrive** for different NOKA numbers? Agent should detect existing automation in progress, queue subsequent requests, and process sequentially to prevent process conflicts.
+- **What happens when concurrent requests arrive** for different BPJS numbers? Agent should detect existing automation in progress, queue subsequent requests, and process sequentially to prevent process conflicts.
 
 - **What happens when config.json is missing or corrupted**? Agent should fail to start with clear error message listing specific missing or invalid configuration fields, preventing silent failures during runtime.
 
@@ -91,7 +91,7 @@ Operators need the ability to force-close stuck or frozen BPJS applications when
 
 - **What happens when credentials in config.json are incorrect**? Agent should detect login failure through UI state validation, log authentication failure, and return error indicating credential verification needed without exposing credential values.
 
-- **What happens when patient NOKA format is invalid** (wrong length, non-numeric)? Agent should validate NOKA format before launching application, return immediate validation error with format requirements, preventing unnecessary application launches.
+- **What happens when patient BPJS number format is invalid** (wrong length, non-numeric)? Agent should validate BPJS number format before launching application, return immediate validation error with format requirements, preventing unnecessary application launches.
 
 ## Requirements *(mandatory)*
 
@@ -99,12 +99,12 @@ Operators need the ability to force-close stuck or frozen BPJS applications when
 
 #### HTTP API Interface
 
-- **FR-001**: Agent MUST expose HTTP endpoint `GET /run_exe?no_peserta={noka}` that launches Frista.exe, performs auto-login, injects NOKA, and triggers verification workflow
-- **FR-002**: Agent MUST expose HTTP endpoint `GET /run_finger_exe?no_peserta={noka}` that launches Finger.exe, injects NOKA, and initiates fingerprint verification workflow
+- **FR-001**: Agent MUST expose HTTP endpoint `GET /run_exe?bpjs={bpjs_number}` that launches Frista.exe, performs auto-login, injects BPJS number, and triggers verification workflow
+- **FR-002**: Agent MUST expose HTTP endpoint `GET /run_finger_exe?bpjs={bpjs_number}` that launches Finger.exe, injects BPJS number, and initiates fingerprint verification workflow
 - **FR-003**: Agent MUST expose HTTP endpoint `GET /stop_exe` that force-terminates any running Frista.exe process within 2 seconds
 - **FR-004**: Agent MUST expose HTTP endpoint `GET /stop_finger_exe` that force-terminates any running Finger.exe process within 2 seconds
 - **FR-005**: Agent MUST return JSON responses in consistent format: `{"status": "success|error", "code": "STATUS_CODE", "message": "description", "data": {...}}`
-- **FR-006**: Agent MUST validate NOKA parameter format (numeric, 13 digits standard for BPJS) before attempting automation and return validation errors immediately
+- **FR-006**: Agent MUST validate BPJS number parameter format (numeric, 13 digits standard for BPJS) before attempting automation and return validation errors immediately
 
 #### Process & Window Management
 
@@ -118,8 +118,8 @@ Operators need the ability to force-close stuck or frozen BPJS applications when
 
 - **FR-012**: Agent MUST identify UI elements using AutomationId, Name, or ControlType properties as defined in configuration
 - **FR-013**: Agent MUST implement retry logic for UI element lookups (minimum 3 attempts with 500ms delays) to handle application load delays
-- **FR-014**: Agent MUST validate successful login by checking for expected post-login UI elements before proceeding with NOKA injection
-- **FR-015**: Agent MUST inject NOKA into designated input field using keyboard simulation with proper focus management
+- **FR-014**: Agent MUST validate successful login by checking for expected post-login UI elements before proceeding with BPJS number injection
+- **FR-015**: Agent MUST inject BPJS number into designated input field using keyboard simulation with proper focus management
 - **FR-016**: Agent MUST trigger search/verification buttons through UI automation (click or keyboard invoke)
 - **FR-017**: Agent MUST wait for verification process completion by monitoring UI state changes or process status
 
@@ -151,19 +151,19 @@ Operators need the ability to force-close stuck or frozen BPJS applications when
 
 - **FR-033**: Agent MUST listen on localhost (127.0.0.1) by default to prevent network exposure
 - **FR-034**: Agent MUST support optional API key validation for requests when configured (X-API-Key header)
-- **FR-035**: Agent MUST NOT store patient data (NOKA values, verification results) beyond request lifecycle
+- **FR-035**: Agent MUST NOT store patient data (BPJS numbers, verification results) beyond request lifecycle
 - **FR-036**: Agent MUST NOT expose sensitive configuration values (credentials, API keys) in logs or API responses
 - **FR-037**: Agent MUST validate that BPJS application executables exist and are accessible before attempting automation
 
 ### Key Entities
 
-- **Automation Request**: Represents incoming HTTP request containing NOKA number and target workflow (Frista or Finger). Includes validation state, timestamp, and correlation ID for tracing.
+- **Automation Request**: Represents incoming HTTP request containing BPJS number and target workflow (Frista or Finger). Includes validation state, timestamp, and correlation ID for tracing.
 
 - **Application Process**: Represents running BPJS application instance (Frista.exe or Finger.exe). Tracks process ID, main window handle, lifecycle state (launching, ready, executing, completed, failed), and execution metrics.
 
-- **UI Element Reference**: Represents specific UI control in BPJS application (login button, NOKA input field, verification trigger). Contains selector strategy (AutomationId/Name/ControlType), retry configuration, and validation rules.
+- **UI Element Reference**: Represents specific UI control in BPJS application (login button, BPJS number input field, verification trigger). Contains selector strategy (AutomationId/Name/ControlType), retry configuration, and validation rules.
 
-- **Automation Workflow**: Represents sequence of automation steps for specific task (login → inject NOKA → trigger verification). Includes step definitions, timeout configurations, success criteria, and rollback procedures.
+- **Automation Workflow**: Represents sequence of automation steps for specific task (login → inject BPJS number → trigger verification). Includes step definitions, timeout configurations, success criteria, and rollback procedures.
 
 - **Configuration Schema**: Represents agent configuration loaded from config.json. Contains application paths, credentials, window patterns, UI selectors, network settings, timeout values, and logging preferences.
 
@@ -175,7 +175,7 @@ Operators need the ability to force-close stuck or frozen BPJS applications when
 
 - **SC-001**: Hospital registration staff can complete patient biometric verification in under 5 seconds from SIMRS request to Frista displaying results, reducing average registration time by 60%
 
-- **SC-002**: Agent achieves 95% or higher automation success rate for valid NOKA requests under normal operating conditions (BPJS server available, correct configuration)
+- **SC-002**: Agent achieves 95% or higher automation success rate for valid BPJS number requests under normal operating conditions (BPJS server available, correct configuration)
 
 - **SC-003**: Kiosk patients can complete self-service fingerprint verification independently without staff assistance in 90% of cases, reducing front-desk support requests
 
@@ -189,6 +189,6 @@ Operators need the ability to force-close stuck or frozen BPJS applications when
 
 - **SC-008**: Telemedicine verification requests complete within appointment waiting period (5-10 minutes) with 90% success rate, enabling seamless consultation starts
 
-- **SC-009**: Zero patient data exposure incidents - no NOKA values or verification results logged or stored beyond request lifecycle, meeting healthcare privacy standards
+- **SC-009**: Zero patient data exposure incidents - no BPJS numbers or verification results logged or stored beyond request lifecycle, meeting healthcare privacy standards
 
 - **SC-010**: Agent startup validation detects 100% of configuration errors (missing files, invalid credentials, wrong paths) before accepting requests, preventing runtime surprises

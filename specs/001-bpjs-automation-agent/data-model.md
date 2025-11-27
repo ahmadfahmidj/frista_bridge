@@ -12,7 +12,7 @@
 
 **Attributes**:
 - **CorrelationId** (string, required): Unique identifier for tracing request through logs (GUID format)
-- **NoPeserta** (string, required): BPJS participant number (NOKA), 13-digit numeric string
+- **NoPeserta** (string, required): BPJS participant number, 13-digit numeric string
 - **WorkflowType** (enum, required): Target workflow - `Frista` or `Finger`
 - **Timestamp** (datetime, required): Request received time (UTC)
 - **ValidationState** (enum): `Valid`, `Invalid`, `Pending` - result of format validation
@@ -70,7 +70,7 @@ Automation Errors (may require config update):
 - AUTOMATION_VERIFICATION_TIMEOUT
 
 Validation Errors (not retriable):
-- VALIDATION_INVALID_NOKA_FORMAT
+- VALIDATION_INVALID_BPJS_FORMAT
 - VALIDATION_MISSING_REQUIRED_FIELD
 
 Timeout Errors (retriable):
@@ -125,7 +125,7 @@ Launching → Loading → Ready → Executing → Completed → Terminated → F
 **Purpose**: Represents a specific UI control in a BPJS application with selector strategies.
 
 **Attributes**:
-- **ElementName** (string, required): Logical name for logging (`LoginButton`, `NokaInputField`, `VerifyButton`)
+- **ElementName** (string, required): Logical name for logging (`LoginButton`, `BpjsInputField`, `VerifyButton`)
 - **AutomationId** (string, optional): Preferred selector - UI Automation AutomationId property
 - **Name** (string, optional): Fallback selector - control's Name property
 - **ControlType** (enum, optional): Last resort selector - type of control (`Button`, `Edit`, `Text`)
@@ -163,10 +163,10 @@ Button, Edit (text input), Text (label), ComboBox, CheckBox, Window, Pane, Custo
 - **CurrentStep** (int): Index of step currently executing (for logging)
 
 **Step Definition** (sub-entity):
-- **StepName** (string): Logical name (`LaunchApplication`, `WaitForWindow`, `Login`, `InjectNoka`, `TriggerVerification`)
+- **StepName** (string): Logical name (`LaunchApplication`, `WaitForWindow`, `Login`, `InjectBpjs`, `TriggerVerification`)
 - **StepType** (enum): `ProcessLaunch`, `WindowWait`, `ElementInteraction`, `Validation`
 - **TargetElement** (UI Element Reference, optional): Element to interact with (if StepType = ElementInteraction)
-- **InputValue** (string, optional): Data to send to element (e.g., username, NOKA)
+- **InputValue** (string, optional): Data to send to element (e.g., username, BPJS number)
 - **ExpectedOutcome** (string, optional): Description of success criteria (for validation)
 
 **StepType Enumeration**:

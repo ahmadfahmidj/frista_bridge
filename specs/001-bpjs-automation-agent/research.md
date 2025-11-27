@@ -221,7 +221,7 @@ Examples:
 - AUTOMATION_ELEMENT_NOT_FOUND
 - AUTOMATION_LOGIN_FAILED
 - AUTOMATION_WINDOW_NOT_FOUND
-- VALIDATION_INVALID_NOKA_FORMAT
+- VALIDATION_INVALID_BPJS_FORMAT
 - TIMEOUT_WINDOW_LOAD
 - TIMEOUT_AUTOMATION_STEP
 ```
@@ -251,7 +251,7 @@ Unit Tests (90% coverage, <1 second execution):
 - ConfigurationValidator logic
 - Request queue ordering
 - Error code mapping
-- NOKA validation rules
+- BPJS number validation rules
 
 Integration Tests (70% coverage, <10 seconds):
 - FlaUI element location strategies
