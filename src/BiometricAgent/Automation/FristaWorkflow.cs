@@ -362,11 +362,20 @@ public sealed class FristaWorkflow
         Log.Debug("[{CorrelationId}] Using credentials: Username={Username} (Source={Source})",
             correlationId, username, !string.IsNullOrWhiteSpace(request.Username) ? "request" : "config");
 
-        // Step 1: Focus on username field and enter username
-        usernameField.Focus();
-        await Task.Delay(200);
-        usernameField.AsTextBox().Text = username;
-        Log.Debug("[{CorrelationId}] Username entered", correlationId);
+        // Step 1: Click on username field to ensure focus, then type username using keyboard
+        Log.Debug("[{CorrelationId}] Clicking on username field to focus", correlationId);
+        usernameField.Click();
+        await Task.Delay(300);
+
+        // Clear any existing content first (Ctrl+A then Delete)
+        FlaUI.Core.Input.Keyboard.TypeSimultaneously(FlaUI.Core.WindowsAPI.VirtualKeyShort.CONTROL, FlaUI.Core.WindowsAPI.VirtualKeyShort.KEY_A);
+        await Task.Delay(100);
+        FlaUI.Core.Input.Keyboard.Press(FlaUI.Core.WindowsAPI.VirtualKeyShort.DELETE);
+        await Task.Delay(100);
+
+        // Type the username using keyboard input (more reliable than TextBox.Text for TkChild)
+        FlaUI.Core.Input.Keyboard.Type(username);
+        Log.Debug("[{CorrelationId}] Username typed: {Username}", correlationId, username);
 
         await Task.Delay(300);
 
@@ -376,9 +385,9 @@ public sealed class FristaWorkflow
 
         await Task.Delay(300);
 
-        // Step 3: Enter password
+        // Step 3: Enter password using keyboard
         FlaUI.Core.Input.Keyboard.Type(password);
-        Log.Debug("[{CorrelationId}] Password entered", correlationId);
+        Log.Debug("[{CorrelationId}] Password typed", correlationId);
 
         await Task.Delay(300);
 
