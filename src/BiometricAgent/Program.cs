@@ -4,6 +4,7 @@ using BiometricAgent.Endpoints;
 using BiometricAgent.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting.WindowsServices;
 using Serilog;
 
 namespace BiometricAgent;
@@ -36,6 +37,12 @@ public class Program
 
             // Build ASP.NET Core Minimal API application
             var builder = WebApplication.CreateBuilder(args);
+
+            // Enable Windows Service hosting (allows running as background service)
+            builder.Host.UseWindowsService(options =>
+            {
+                options.ServiceName = "BiometricAgent";
+            });
 
             // Configure Kestrel to listen on configured host:port
             builder.WebHost.UseUrls($"http://{config.HttpServer.Host}:{config.HttpServer.Port}");

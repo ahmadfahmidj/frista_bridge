@@ -21,12 +21,22 @@ public static class LoggingService
         var minimumLevel = ParseLogLevel(config.MinimumLevel);
         loggerConfig.MinimumLevel.Is(minimumLevel);
 
+        // Resolve log path relative to executable directory (important for Windows Service mode)
+        var resolvedLogPath = ConfigurationLoader.ResolvePathRelativeToExecutable(config.LogPath);
+        
+        // Ensure log directory exists
+        var logDirectory = Path.GetDirectoryName(resolvedLogPath);
+        if (!string.IsNullOrEmpty(logDirectory) && !Directory.Exists(logDirectory))
+        {
+            Directory.CreateDirectory(logDirectory);
+        }
+
         // Configure file sink with rolling policy
         if (config.UseStructuredLogging)
         {
             loggerConfig.WriteTo.File(
                 formatter: new JsonFormatter(),
-                path: config.LogPath,
+                path: resolvedLogPath,
                 rollingInterval: ParseRollingInterval(config.RollingInterval),
                 retainedFileCountLimit: config.RetainedFileCountLimit,
                 fileSizeLimitBytes: config.FileSizeLimitBytes,
@@ -37,7 +47,7 @@ public static class LoggingService
         else
         {
             loggerConfig.WriteTo.File(
-                path: config.LogPath,
+                path: resolvedLogPath,
                 rollingInterval: ParseRollingInterval(config.RollingInterval),
                 retainedFileCountLimit: config.RetainedFileCountLimit,
                 fileSizeLimitBytes: config.FileSizeLimitBytes,

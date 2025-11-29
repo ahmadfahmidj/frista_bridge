@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using BiometricAgent.Configuration;
 using BiometricAgent.Models;
@@ -13,11 +14,34 @@ public sealed class ConfigurationLoader
     private const string DEFAULT_CONFIG_PATH = "config/config.json";
 
     /// <summary>
+    /// Gets the base directory where the executable is located.
+    /// This is important for Windows Service mode where working directory differs.
+    /// </summary>
+    public static string GetExecutableDirectory()
+    {
+        // Use AppContext.BaseDirectory which works correctly for single-file and service deployments
+        return AppContext.BaseDirectory;
+    }
+
+    /// <summary>
+    /// Resolves a relative path to be relative to the executable directory.
+    /// </summary>
+    public static string ResolvePathRelativeToExecutable(string relativePath)
+    {
+        if (Path.IsPathRooted(relativePath))
+        {
+            return relativePath;
+        }
+        return Path.Combine(GetExecutableDirectory(), relativePath);
+    }
+
+    /// <summary>
     /// Loads configuration from file path.
     /// </summary>
     public static AgentConfiguration Load(string? configPath = null)
     {
-        var path = configPath ?? DEFAULT_CONFIG_PATH;
+        // Resolve path relative to executable directory (important for Windows Service mode)
+        var path = ResolvePathRelativeToExecutable(configPath ?? DEFAULT_CONFIG_PATH);
 
         if (!File.Exists(path))
         {
