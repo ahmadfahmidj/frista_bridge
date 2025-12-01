@@ -2,8 +2,8 @@
 
 ## 📦 Paket Rilis
 
-**Versi:** 1.0.0  
-**Tanggal Rilis:** 28 November 2025  
+**Versi:** 1.0.1  
+**Tanggal Rilis:** 29 November 2025  
 **Platform:** Windows x64 (Windows 10/11, Windows Server 2016+)  
 **Runtime:** Self-contained (sudah termasuk .NET 8.0, tidak perlu install runtime tambahan)
 
@@ -11,14 +11,17 @@
 
 ## 📁 Isi Folder Publish
 
-Folder `publish/` hanya berisi file yang diperlukan:
+Folder `publish/` berisi file yang diperlukan:
 
 ```
 publish/
-├── BiometricAgent.exe    # Aplikasi utama (single-file, ~82 MB)
-└── config/
-    ├── config.json           # File konfigurasi (WAJIB diedit)
-    └── config.example.json   # Contoh konfigurasi
+├── BiometricAgent.exe        # Aplikasi utama (single-file, ~82 MB)
+├── asset/
+│   └── heartbeat.ico         # Icon untuk system tray
+├── config/
+│   ├── config.json           # File konfigurasi (WAJIB diedit)
+│   └── config.example.json   # Contoh konfigurasi
+└── logs/                     # Folder log (dibuat otomatis)
 ```
 
 **Catatan:** Semua dependensi sudah dikemas dalam `BiometricAgent.exe`, tidak ada file DLL terpisah.
@@ -40,8 +43,11 @@ Struktur folder di KIOSK setelah copy:
 ```
 C:\BiometricAgent\
 ├── BiometricAgent.exe
-└── config\
-    └── config.json
+├── asset\
+│   └── heartbeat.ico
+├── config\
+│   └── config.json
+└── logs\
 ```
 
 ---
@@ -281,6 +287,7 @@ Enkripsi ulang password:
 ## ✅ Checklist Deployment
 
 - [ ] File `BiometricAgent.exe` sudah dicopy ke KIOSK
+- [ ] Folder `asset/` sudah dicopy (untuk tray icon)
 - [ ] Folder `config/` sudah dicopy dengan `config.json`
 - [ ] Path aplikasi di `config.json` sudah disesuaikan
 - [ ] Username sudah diisi di `config.json`
@@ -289,6 +296,27 @@ Enkripsi ulang password:
 - [ ] Service sudah distart dengan `sc.exe start`
 - [ ] Health endpoint merespon dengan benar
 - [ ] Test automasi dengan nomor BPJS valid
+
+---
+
+## 🖥️ System Tray Icon (Fitur Baru)
+
+Saat aplikasi dijalankan **secara manual** (bukan sebagai Windows Service), akan muncul icon di system tray untuk monitoring:
+
+### Fitur Tray Icon:
+- **Icon Hijau** 🟢 = Service sehat dan berjalan normal
+- **Icon Merah** 🔴 = Service bermasalah atau tidak merespon
+- **Auto health check** setiap 30 detik
+
+### Menu Konteks (Klik Kanan):
+- **Check Health** — Cek status dan tampilkan notifikasi
+- **Open Logs Folder** — Buka folder logs di Explorer
+- **Exit** — Tutup aplikasi
+
+### Catatan:
+- Tray icon **hanya muncul saat dijalankan manual**
+- Saat berjalan sebagai Windows Service, tray icon tidak akan muncul (normal)
+- Icon menggunakan file `asset/heartbeat.ico`
 
 ---
 

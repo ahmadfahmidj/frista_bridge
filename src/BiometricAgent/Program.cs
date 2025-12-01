@@ -1,4 +1,7 @@
 ﻿using System.Text;
+using System.Runtime.Versioning;
+using System.Diagnostics;
+using System.Net.NetworkInformation;
 using BiometricAgent.Configuration;
 using BiometricAgent.Endpoints;
 using BiometricAgent.Services;
@@ -13,6 +16,7 @@ namespace BiometricAgent;
 /// Main entry point for the Biometric Automation Agent.
 /// Initializes configuration, logging, HTTP server, and services.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public class Program
 {
     public static async Task Main(string[] args)
@@ -34,6 +38,9 @@ public class Program
 
             Log.Information("=== Biometric Automation Agent Starting ===");
             Log.Information("Host: {Host}:{Port}", config.HttpServer.Host, config.HttpServer.Port);
+
+            // Kill any process using the configured port before starting
+            KillProcessOnPort(config.HttpServer.Port);
 
             // Build ASP.NET Core Minimal API application
             var builder = WebApplication.CreateBuilder(args);
@@ -81,8 +88,36 @@ public class Program
             RunFingerExeEndpoint.Initialize(config, queueService);
             HealthEndpoint.Initialize(queueService);
 
+            // Initialize system tray icon for monitoring (only when not running as Windows Service)
+            TrayIconService? trayIcon = null;
+            if (!WindowsServiceHelpers.IsWindowsService())
+            {
+                trayIcon = new TrayIconService(config.HttpServer.Host, config.HttpServer.Port);
+                
+                // Start tray icon on a separate STA thread (required for Windows Forms)
+                var trayThread = new Thread(() =>
+                {
+                    System.Windows.Forms.Application.EnableVisualStyles();
+                    System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
+                    trayIcon.Initialize();
+                    System.Windows.Forms.Application.Run();
+                });
+                trayThread.SetApartmentState(ApartmentState.STA);
+                trayThread.IsBackground = true;
+                trayThread.Start();
+
+                Log.Information("System tray icon started for monitoring");
+            }
+            else
+            {
+                Log.Information("Running as Windows Service - tray icon disabled");
+            }
+
             // Start HTTP server
             await app.RunAsync();
+
+            // Cleanup tray icon on shutdown
+            trayIcon?.Dispose();
         }
         catch (Exception ex)
         {
@@ -119,6 +154,120 @@ public class Program
             await HealthEndpoint.HandleAsync(ctx));
 
         Log.Information("Endpoints mapped: /run_exe, /run_finger_exe, /stop_exe, /stop_finger_exe, /health");
+    }
+
+    /// <summary>
+    /// Kills any process currently using the specified port.
+    /// This ensures the agent can bind to the port on startup.
+    /// </summary>
+    /// <param name="port">The port number to check and free up.</param>
+    private static void KillProcessOnPort(int port)
+    {
+        try
+        {
+            Log.Information("Checking for processes using port {Port}...", port);
+            
+            // Get all active TCP listeners
+            var ipProperties = IPGlobalProperties.GetIPGlobalProperties();
+            var listeners = ipProperties.GetActiveTcpListeners();
+            
+            // Check if the port is in use
+            bool portInUse = listeners.Any(ep => ep.Port == port);
+            
+            if (!portInUse)
+            {
+                Log.Information("Port {Port} is available", port);
+                return;
+            }
+            
+            Log.Warning("Port {Port} is in use, attempting to free it...", port);
+            
+            // Use netstat to find the PID using this port
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/c netstat -ano | findstr :{port} | findstr LISTENING",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            
+            using var netstatProcess = Process.Start(startInfo);
+            if (netstatProcess == null) return;
+            
+            string output = netstatProcess.StandardOutput.ReadToEnd();
+            netstatProcess.WaitForExit();
+            
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                Log.Information("No listening process found on port {Port}", port);
+                return;
+            }
+            
+            // Parse the output to get PIDs
+            var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var killedPids = new HashSet<int>();
+            
+            foreach (var line in lines)
+            {
+                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 5 && int.TryParse(parts[^1].Trim(), out int pid) && pid > 0 && !killedPids.Contains(pid))
+                {
+                    try
+                    {
+                        var process = Process.GetProcessById(pid);
+                        string processName = process.ProcessName;
+                        
+                        // Don't kill system processes
+                        if (processName.Equals("System", StringComparison.OrdinalIgnoreCase) ||
+                            processName.Equals("Idle", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+                        
+                        Log.Warning("Killing process {ProcessName} (PID: {Pid}) using port {Port}", processName, pid, port);
+                        
+                        // Use taskkill /F /T which works better with elevated processes
+                        var killStartInfo = new ProcessStartInfo
+                        {
+                            FileName = "taskkill",
+                            Arguments = $"/F /T /PID {pid}",
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true
+                        };
+                        
+                        using var killProcess = Process.Start(killStartInfo);
+                        if (killProcess != null)
+                        {
+                            killProcess.WaitForExit(5000);
+                            killedPids.Add(pid);
+                            Log.Information("Process {ProcessName} (PID: {Pid}) terminated", processName, pid);
+                        }
+                    }
+                    catch (ArgumentException)
+                    {
+                        // Process already exited
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warning(ex, "Failed to kill process with PID {Pid}", pid);
+                    }
+                }
+            }
+            
+            if (killedPids.Count > 0)
+            {
+                // Wait a moment for the port to be released
+                Thread.Sleep(2000);
+                Log.Information("Freed port {Port} by terminating {Count} process(es)", port, killedPids.Count);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Error while checking/freeing port {Port}", port);
+        }
     }
 
     /// <summary>
