@@ -1,5 +1,6 @@
 using BiometricAgent.Configuration;
 using BiometricAgent.Models;
+using BiometricAgent.Services;
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
@@ -163,18 +164,16 @@ public sealed class FingerWorkflow
             throw new FileNotFoundException($"Finger executable not found: {_config.ExecutablePath}");
         }
 
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = _config.ExecutablePath,
-            UseShellExecute = true,
-            WorkingDirectory = Path.GetDirectoryName(_config.ExecutablePath)
-        };
-
-        _process = Process.Start(startInfo);
+        // Use InteractiveProcessLauncher to handle Session 0 isolation when running as a service
+        _process = InteractiveProcessLauncher.LaunchInUserSession(
+            _config.ExecutablePath, 
+            null, 
+            Path.GetDirectoryName(_config.ExecutablePath));
 
         if (_process == null)
         {
-            throw new InvalidOperationException("Failed to start Finger process");
+            throw new InvalidOperationException("Failed to start Finger process. " +
+                "If running as a Windows Service, ensure a user is logged in to the console.");
         }
 
         Log.Information("[{CorrelationId}] Finger process started with PID={ProcessId}",

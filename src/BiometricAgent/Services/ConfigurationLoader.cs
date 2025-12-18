@@ -84,10 +84,11 @@ public sealed class ConfigurationLoader
     {
         var errors = new List<string>();
 
-        // Validate HTTP server config
-        if (config.HttpServer.Host != "127.0.0.1")
+        // Validate HTTP server config - allow 127.0.0.1, localhost, or 0.0.0.0 (for service mode)
+        var validHosts = new[] { "127.0.0.1", "localhost", "0.0.0.0", "+" };
+        if (!validHosts.Contains(config.HttpServer.Host))
         {
-            errors.Add("HttpServer.Host must be 127.0.0.1 for security");
+            errors.Add("HttpServer.Host must be 127.0.0.1, localhost, 0.0.0.0, or + for security");
         }
 
         if (config.HttpServer.Port < 1 || config.HttpServer.Port > 65535)

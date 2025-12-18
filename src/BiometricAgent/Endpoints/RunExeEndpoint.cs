@@ -89,7 +89,8 @@ public static class RunExeEndpoint
                 var workflow = new FristaWorkflow(
                     _config.Applications.Frista,
                     _config.Credentials,
-                    _config.UIAutomation
+                    _config.UIAutomation,
+                    _config.ErrorHandling
                 );
 
                 return await workflow.ExecuteAsync(req);

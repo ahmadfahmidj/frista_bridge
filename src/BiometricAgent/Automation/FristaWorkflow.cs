@@ -1,5 +1,6 @@
 using BiometricAgent.Configuration;
 using BiometricAgent.Models;
+using BiometricAgent.Services;
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
@@ -18,17 +19,20 @@ public sealed class FristaWorkflow
     private readonly ApplicationConfig _config;
     private readonly CredentialsConfig _credentials;
     private readonly UIAutomationConfig _uiConfig;
+    private readonly int _maxErrorDialogAttempts;
     private Process? _process;
     private AutomationBase? _automation;
 
     public FristaWorkflow(
         ApplicationConfig config,
         CredentialsConfig credentials,
-        UIAutomationConfig uiConfig)
+        UIAutomationConfig uiConfig,
+        ErrorHandlingConfig errorHandling)
     {
         _config = config;
         _credentials = credentials;
         _uiConfig = uiConfig;
+        _maxErrorDialogAttempts = Math.Max(1, errorHandling.MaxErrorRetries);
     }
 
     /// <summary>
@@ -66,6 +70,9 @@ public sealed class FristaWorkflow
 
             // Step 4: Trigger biometric verification
             await TriggerVerificationAsync(correlationId);
+
+            // Step 5: Watch for error dialogs and retry until process is stopped
+            await WatchForErrorDialogAsync(correlationId, request.NoPeserta);
 
             stopwatch.Stop();
 
@@ -162,18 +169,16 @@ public sealed class FristaWorkflow
             throw new FileNotFoundException($"Frista executable not found: {_config.ExecutablePath}");
         }
 
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = _config.ExecutablePath,
-            UseShellExecute = true,
-            WorkingDirectory = Path.GetDirectoryName(_config.ExecutablePath)
-        };
-
-        _process = Process.Start(startInfo);
+        // Use InteractiveProcessLauncher to handle Session 0 isolation when running as a service
+        _process = InteractiveProcessLauncher.LaunchInUserSession(
+            _config.ExecutablePath, 
+            null, 
+            Path.GetDirectoryName(_config.ExecutablePath));
 
         if (_process == null)
         {
-            throw new InvalidOperationException("Failed to start Frista process");
+            throw new InvalidOperationException("Failed to start Frista process. " +
+                "If running as a Windows Service, ensure a user is logged in to the console.");
         }
 
         Log.Information("[{CorrelationId}] Frista process started with PID={ProcessId}",
@@ -481,14 +486,192 @@ public sealed class FristaWorkflow
             throw new InvalidOperationException("Ambil Foto button not found");
         }
 
-        Log.Debug("[{CorrelationId}] Ambil Foto button found, clicking it", correlationId);
+        Log.Debug("[{CorrelationId}] Ambil Foto button found, waiting 3 seconds before clicking", correlationId);
+        
+        // Wait 3 seconds before clicking as requested
+        await Task.Delay(3000);
+        
+        // Click twice with 0.5s gap to ensure capture starts
         verifyButton.Click();
-        Log.Information("[{CorrelationId}] Verification triggered", correlationId);
+        await Task.Delay(500);
+        verifyButton.Click();
+        Log.Information("[{CorrelationId}] Verification triggered (double click with 0.5s gap)", correlationId);
 
-        // Wait for verification result (adjust timeout based on actual Frista behavior)
-        await Task.Delay(_uiConfig.ElementWaitTimeMs * 3);
+        // Wait briefly for verification to start
+        await Task.Delay(_uiConfig.ElementWaitTimeMs);
 
-        Log.Information("[{CorrelationId}] Verification completed", correlationId);
+        Log.Information("[{CorrelationId}] Verification triggered, starting error dialog watch loop", correlationId);
+    }
+
+    /// <summary>
+    /// Watches for error dialogs from Frista and handles retry logic.
+    /// Continues until the Frista process is terminated (via stop_exe).
+    /// </summary>
+    private async Task WatchForErrorDialogAsync(string correlationId, string noka)
+    {
+        Log.Information("[{CorrelationId}] Starting error dialog watch loop", correlationId);
+
+        if (_automation == null || _process == null)
+        {
+            throw new InvalidOperationException("Automation not initialized");
+        }
+
+        // Known error dialog names from Frista (exact matches)
+        var knownErrorDialogs = new[] { "Hasil Pengenalan Wajah" };
+        var retryAttempts = 0;
+        var maxAttemptsReached = false;
+        var successDetected = false;
+
+        while (!_process.HasExited && retryAttempts < _maxErrorDialogAttempts)
+        {
+            try
+            {
+                var desktop = _automation.GetDesktop();
+                AutomationElement? errorDialog = null;
+                string? detectedDialogName = null;
+
+                // Strategy 1: Check for known error dialogs by exact name
+                foreach (var dialogName in knownErrorDialogs)
+                {
+                    errorDialog = desktop.FindFirstDescendant(cf => 
+                        cf.ByName(dialogName).And(cf.ByControlType(ControlType.Window)));
+                    
+                    if (errorDialog != null)
+                    {
+                        detectedDialogName = dialogName;
+                        break;
+                    }
+                }
+
+                // Strategy 2: Check for any dialog with "Error" in its name
+                if (errorDialog == null)
+                {
+                    var allWindows = desktop.FindAllDescendants(cf => cf.ByControlType(ControlType.Window));
+                    foreach (var window in allWindows)
+                    {
+                        var windowName = window.Name ?? string.Empty;
+                        if (windowName.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
+                            windowName.Contains("Gagal", StringComparison.OrdinalIgnoreCase) ||
+                            windowName.Contains("Failed", StringComparison.OrdinalIgnoreCase))
+                        {
+                            errorDialog = window;
+                            detectedDialogName = windowName;
+                            break;
+                        }
+                    }
+                }
+
+                if (errorDialog != null && detectedDialogName != null)
+                {
+                    // Check for success message inside the dialog before treating it as an error
+                    var dialogTextElements = errorDialog.FindAllDescendants(cf => cf.ByControlType(ControlType.Text));
+                    var dialogTextContent = string.Empty;
+
+                    foreach (var textElement in dialogTextElements)
+                    {
+                        if (!string.IsNullOrWhiteSpace(textElement.Name))
+                        {
+                            dialogTextContent += textElement.Name + " ";
+                        }
+                    }
+
+                    dialogTextContent = dialogTextContent.Trim();
+
+                    var isSuccessDialog =
+                        dialogTextContent.Contains("berhasil", StringComparison.OrdinalIgnoreCase) ||
+                        dialogTextContent.Contains("peserta telah terdaftar", StringComparison.OrdinalIgnoreCase);
+
+                    if (isSuccessDialog)
+                    {
+                        Log.Information("[{CorrelationId}] Success dialog detected: '{DialogName}' with message '{DialogText}'", correlationId, detectedDialogName, dialogTextContent);
+
+                        var successOkButton = errorDialog.FindFirstDescendant(cf =>
+                            cf.ByName("OK").And(cf.ByControlType(ControlType.Button)));
+
+                        if (successOkButton != null)
+                        {
+                            successOkButton.Click();
+                            await Task.Delay(100);
+                        }
+
+                        successDetected = true;
+                        break;
+                    }
+
+                    Log.Warning("[{CorrelationId}] Error dialog detected: '{DialogName}'", correlationId, detectedDialogName);
+                    retryAttempts++;
+                    Log.Information("[{CorrelationId}] Error dialog retry attempt {Attempt}/{MaxAttempts}", correlationId, retryAttempts, _maxErrorDialogAttempts);
+
+                    if (retryAttempts >= _maxErrorDialogAttempts)
+                    {
+                        Log.Warning("[{CorrelationId}] Max error dialog attempts reached, exiting watch loop", correlationId);
+                        maxAttemptsReached = true;
+                        break;
+                    }
+
+                    // Find and click the OK button
+                    var okButton = errorDialog.FindFirstDescendant(cf => 
+                        cf.ByName("OK").And(cf.ByControlType(ControlType.Button)));
+
+                    if (okButton != null)
+                    {
+                        Log.Information("[{CorrelationId}] Clicking OK button on error dialog", correlationId);
+                        okButton.Click();
+                        await Task.Delay(100); // Wait for dialog to close
+
+                        // Check if process was killed before retrying
+                        if (_process.HasExited)
+                        {
+                            Log.Information("[{CorrelationId}] Frista process exited after dismissing dialog, stopping retry", correlationId);
+                            break;
+                        }
+
+                        // Re-inject NOKA and trigger verification again
+                        Log.Information("[{CorrelationId}] Retrying - re-injecting NOKA and triggering verification", correlationId);
+                        await InjectNokaAsync(correlationId, noka);
+                        
+                        // Check again before triggering verification
+                        if (_process.HasExited)
+                        {
+                            Log.Information("[{CorrelationId}] Frista process exited after NOKA injection, stopping retry", correlationId);
+                            break;
+                        }
+                        
+                        await TriggerVerificationAsync(correlationId);
+                    }
+                    else
+                    {
+                        Log.Warning("[{CorrelationId}] OK button not found in error dialog", correlationId);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Process might have exited, which is expected when stop_exe is called
+                if (_process.HasExited)
+                {
+                    Log.Information("[{CorrelationId}] Frista process has exited, stopping watch loop", correlationId);
+                    break;
+                }
+                Log.Debug(ex, "[{CorrelationId}] Error while checking for dialogs (may be transient)", correlationId);
+            }
+
+            // Poll every 500ms
+            await Task.Delay(500);
+        }
+
+        if (successDetected)
+        {
+            Log.Information("[{CorrelationId}] Error dialog watch loop ended (success dialog detected)", correlationId);
+        }
+        else if (maxAttemptsReached)
+        {
+            Log.Information("[{CorrelationId}] Error dialog watch loop ended (max attempts reached)", correlationId);
+        }
+        else
+        {
+            Log.Information("[{CorrelationId}] Error dialog watch loop ended (process exited)", correlationId);
+        }
     }
 
     /// <summary>

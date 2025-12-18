@@ -7,6 +7,9 @@
     <Nullable>enable</Nullable>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     
+    <!-- Suppress NU1701 for FlaUI packages (they work fine on .NET 8.0 via compatibility mode) -->
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
+    
     <!-- Application Icon -->
     <ApplicationIcon>asset\heartbeat.ico</ApplicationIcon>
     

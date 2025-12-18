@@ -259,8 +259,31 @@ public class Program
             
             if (killedPids.Count > 0)
             {
-                // Wait a moment for the port to be released
-                Thread.Sleep(2000);
+                // Wait for the port to be released with verification
+                Log.Information("Waiting for port {Port} to be released after terminating {Count} process(es)...", port, killedPids.Count);
+                
+                bool portReleased = false;
+                for (int attempt = 0; attempt < 10; attempt++)
+                {
+                    Thread.Sleep(1000); // Wait 1 second between checks
+                    
+                    // Re-check if port is still in use
+                    var currentListeners = IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners();
+                    if (!currentListeners.Any(ep => ep.Port == port))
+                    {
+                        portReleased = true;
+                        Log.Information("Port {Port} is now available (released after {Seconds}s)", port, attempt + 1);
+                        break;
+                    }
+                    
+                    Log.Debug("Port {Port} still in use, waiting... (attempt {Attempt}/10)", port, attempt + 1);
+                }
+                
+                if (!portReleased)
+                {
+                    Log.Warning("Port {Port} may still be in use after waiting. Proceeding anyway...", port);
+                }
+                
                 Log.Information("Freed port {Port} by terminating {Count} process(es)", port, killedPids.Count);
             }
         }

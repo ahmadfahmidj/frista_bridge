@@ -75,6 +75,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "startupicon"; Description: "Start automatically with Windows"; GroupDescription: "Startup Options:"; Flags: unchecked
+Name: "installservice"; Description: "Install as Windows Service (auto-start on boot)"; GroupDescription: "Service Options:"; Flags: unchecked
 
 [Files]
 ; Main executable - use published self-contained build
@@ -195,6 +196,71 @@ begin
   end;
 end;
 
+// Add URL ACL reservation for HTTP.sys (required for Windows Service)
+procedure AddUrlAcl();
+var
+  ResultCode: Integer;
+begin
+  // Remove existing URL ACL first (ignore errors)
+  Exec('netsh', 'http delete urlacl url=http://127.0.0.1:5001/', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('netsh', 'http delete urlacl url=http://+:5001/', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  
+  // Add URL ACL for Everyone to allow binding
+  if Exec('netsh', 'http add urlacl url=http://+:5001/ user=Everyone', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    Log('URL ACL reservation added for port 5001');
+  end
+  else
+  begin
+    Log('Failed to add URL ACL reservation');
+  end;
+end;
+
+// Remove URL ACL reservation
+procedure RemoveUrlAcl();
+var
+  ResultCode: Integer;
+begin
+  Exec('netsh', 'http delete urlacl url=http://+:5001/', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('netsh', 'http delete urlacl url=http://127.0.0.1:5001/', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Log('URL ACL reservation removed');
+end;
+
+// Install the Windows Service
+procedure InstallWindowsService();
+var
+  ResultCode: Integer;
+  ServicePath: String;
+begin
+  ServicePath := ExpandConstant('{app}\{#MyAppExeName}');
+  
+  // Create the Windows Service
+  if Exec(ExpandConstant('{sys}\sc.exe'), 
+          'create {#MyAppServiceName} binPath= "' + ServicePath + '" start= auto DisplayName= "{#MyAppName}"',
+          '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    // Set service description
+    Exec(ExpandConstant('{sys}\sc.exe'),
+         'description {#MyAppServiceName} "Biometric Automation Agent for BPJS integration. Provides HTTP API for automating Frista and Finger applications."',
+         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    
+    // Configure service recovery options (restart on failure): 5s, 10s, 30s
+    Exec(ExpandConstant('{sys}\sc.exe'),
+         'failure {#MyAppServiceName} reset= 86400 actions= restart/5000/restart/10000/restart/30000',
+         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    
+    Log('Windows Service installed successfully');
+    
+    // Start the service
+    Exec(ExpandConstant('{sys}\sc.exe'), 'start {#MyAppServiceName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Log('Windows Service started');
+  end
+  else
+  begin
+    Log('Failed to install Windows Service');
+  end;
+end;
+
 // Remove Windows Firewall rule
 procedure RemoveFirewallRule();
 var
@@ -216,6 +282,15 @@ begin
   begin
     // Add Windows Firewall rule for HTTP API access
     AddFirewallRule();
+    
+    // Add URL ACL reservation (required for service to bind to HTTP)
+    AddUrlAcl();
+    
+    // Install as Windows Service if selected
+    if WizardIsTaskSelected('installservice') then
+    begin
+      InstallWindowsService();
+    end;
   end;
 end;
 
@@ -236,6 +311,9 @@ begin
     
     // Remove Windows Firewall rule
     RemoveFirewallRule();
+    
+    // Remove URL ACL reservation
+    RemoveUrlAcl();
   end;
 end;
 
