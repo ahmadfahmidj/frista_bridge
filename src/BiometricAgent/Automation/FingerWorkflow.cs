@@ -542,27 +542,26 @@ public sealed class FingerWorkflow
         // Look for Edit controls on the main screen (after login)
         var editFields = mainWindow.FindAllDescendants(cf => cf.ByControlType(ControlType.Edit));
 
-        // The NOKA field should be the first visible Edit control on the main screen
-        // (login fields should be gone after successful login)
-        var nokaField = editFields.FirstOrDefault();
+        // Try to find the NOKA field by proximity to its label first,
+        // then fall back to the topmost Edit control.
+        AutomationElement? nokaField = null;
 
-        if (nokaField == null && editFields.Length > 0)
+        if (editFields.Length > 0)
         {
-            // If multiple edit fields, try to find one near the text "Masukkan No. Kartu BPJS Kesehatan"
+            // Strategy 1: find Edit field near the "Masukkan No. Kartu BPJS Kesehatan" label
             var nokaLabel = mainWindow.FindFirstDescendant(cf =>
                 cf.ByControlType(ControlType.Text).And(cf.ByName("Masukkan No. Kartu BPJS Kesehatan")));
 
             if (nokaLabel != null)
             {
                 var labelRect = nokaLabel.Properties.BoundingRectangle.Value;
-                // Find edit field near this label (within 100 pixels vertically)
                 nokaField = editFields
                     .Where(e => Math.Abs(e.Properties.BoundingRectangle.Value.Top - labelRect.Top) < 100)
                     .OrderBy(e => Math.Abs(e.Properties.BoundingRectangle.Value.Top - labelRect.Bottom))
                     .FirstOrDefault();
             }
 
-            // Last resort: use the topmost Edit control
+            // Strategy 2: use the topmost Edit control
             if (nokaField == null)
             {
                 nokaField = editFields

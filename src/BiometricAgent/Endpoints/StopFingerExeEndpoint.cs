@@ -53,7 +53,7 @@ public static class StopFingerExeEndpoint
                         Log.Warning("[{CorrelationId}] After.exe PID={ProcessId} did not exit gracefully, forcing termination",
                             correlationId, process.Id);
                         process.Kill();
-                        process.WaitForExit();
+                        process.WaitForExit(5000);
                     }
 
                     terminated++;

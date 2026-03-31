@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)",
+      "Bash(dotnet publish:*)",
+      "Bash(dotnet run:*)",
+      "Bash(powershell -Command \"Invoke-RestMethod http://127.0.0.1:5050/health | ConvertTo-Json\")"
+    ]
+  }
+}

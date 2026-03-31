@@ -113,6 +113,58 @@ public class Program
                 Log.Information("Running as Windows Service - tray icon disabled");
             }
 
+            // Pre-launch Frista in the background so it is ready for the first request.
+            // This warms the OS file cache on cold boot and leaves the process running
+            // so Option B (attach-if-running) in FristaWorkflow kicks in immediately.
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    // Brief delay to let the desktop settle after startup
+                    await Task.Delay(TimeSpan.FromSeconds(5));
+
+                    // Skip if Frista is already running
+                    var existing = Process.GetProcessesByName("Frista");
+                    if (existing.Length > 0)
+                    {
+                        Log.Information("Frista already running (PID={ProcessId}), skipping pre-launch", existing[0].Id);
+                        foreach (var p in existing) p.Dispose();
+                        return;
+                    }
+
+                    if (!File.Exists(config.Applications.Frista.ExecutablePath))
+                    {
+                        Log.Warning("Frista pre-launch skipped: executable not found at {Path}",
+                            config.Applications.Frista.ExecutablePath);
+                        return;
+                    }
+
+                    Log.Information("Pre-launching Frista to warm file cache...");
+                    var process = InteractiveProcessLauncher.LaunchInUserSession(
+                        config.Applications.Frista.ExecutablePath,
+                        null,
+                        Path.GetDirectoryName(config.Applications.Frista.ExecutablePath));
+
+                    if (process != null)
+                    {
+                        Log.Information("Frista pre-launched (PID={ProcessId}), ready for first request", process.Id);
+
+                        // Open kiosk URL in browser after Frista launches
+                        if (!string.IsNullOrWhiteSpace(config.Kiosk.Url))
+                        {
+                            await Task.Delay(TimeSpan.FromSeconds(config.Kiosk.DelaySeconds));
+                            OpenKioskUrl(config.Kiosk.Url, config.Kiosk.Fullscreen);
+                        }
+                    }
+                    else
+                        Log.Warning("Frista pre-launch returned null (user session may not be ready yet)");
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Frista pre-launch failed (non-critical, first request will launch on demand)");
+                }
+            });
+
             // Start HTTP server
             await app.RunAsync();
 
@@ -154,6 +206,80 @@ public class Program
             await HealthEndpoint.HandleAsync(ctx));
 
         Log.Information("Endpoints mapped: /run_exe, /run_finger_exe, /stop_exe, /stop_finger_exe, /health");
+    }
+
+    /// <summary>
+    /// Opens the kiosk URL in the browser. If fullscreen is enabled, finds Chrome or Edge
+    /// and launches with --start-fullscreen --app flags. Falls back to default browser.
+    /// </summary>
+    private static void OpenKioskUrl(string url, bool fullscreen)
+    {
+        if (!fullscreen)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+                Log.Information("Kiosk URL opened in browser: {Url}", url);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to open kiosk URL: {Url}", url);
+            }
+            return;
+        }
+
+        // Fullscreen: try Chrome then Edge with --start-fullscreen --app=URL
+        var chromePaths = new[]
+        {
+            @"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            @"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                @"Google\Chrome\Application\chrome.exe")
+        };
+
+        var edgePaths = new[]
+        {
+            @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            @"C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+        };
+
+        var browserPath = chromePaths.FirstOrDefault(File.Exists)
+                       ?? edgePaths.FirstOrDefault(File.Exists);
+
+        if (browserPath != null)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = browserPath,
+                    Arguments = $"--start-fullscreen --app=\"{url}\"",
+                    UseShellExecute = false
+                });
+                Log.Information("Kiosk URL opened fullscreen in {Browser}: {Url}",
+                    Path.GetFileNameWithoutExtension(browserPath), url);
+                return;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to launch browser fullscreen, falling back to default browser");
+            }
+        }
+        else
+        {
+            Log.Warning("Chrome and Edge not found, falling back to default browser (no fullscreen)");
+        }
+
+        // Fallback: open in default browser without fullscreen
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            Log.Information("Kiosk URL opened in default browser (no fullscreen): {Url}", url);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to open kiosk URL: {Url}", url);
+        }
     }
 
     /// <summary>

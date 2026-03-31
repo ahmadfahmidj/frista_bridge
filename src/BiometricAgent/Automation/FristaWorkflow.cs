@@ -121,17 +121,15 @@ public sealed class FristaWorkflow
     }
 
     /// <summary>
-    /// Step 1: Close any existing Frista processes and launch a fresh instance.
+    /// Step 1: Kill any existing Frista processes and launch a fresh instance.
     /// </summary>
     private async Task<WindowState> LaunchOrAttachFristaAsync(string correlationId)
     {
         // Initialize FlaUI automation
         _automation = new UIA3Automation();
 
-        // Check if Frista is already running and close it
-        var existingProcesses = Process.GetProcessesByName("frista")
-            .Concat(Process.GetProcessesByName("Frista"))
-            .ToArray();
+        // Kill any existing Frista processes before launching fresh
+        var existingProcesses = Process.GetProcessesByName("Frista").ToArray();
 
         if (existingProcesses.Length > 0)
         {
@@ -145,7 +143,7 @@ public sealed class FristaWorkflow
                     Log.Debug("[{CorrelationId}] Terminating Frista process PID={ProcessId}",
                         correlationId, existingProcess.Id);
                     existingProcess.Kill();
-                    existingProcess.WaitForExit(2000); // Wait up to 2 seconds for clean exit
+                    existingProcess.WaitForExit(2000);
                     Log.Information("[{CorrelationId}] Frista process PID={ProcessId} terminated",
                         correlationId, existingProcess.Id);
                 }
@@ -156,12 +154,11 @@ public sealed class FristaWorkflow
                 }
             }
 
-            // Wait a moment for processes to fully terminate
             await Task.Delay(500);
         }
 
-        // Not running, launch new instance
-        Log.Information("[{CorrelationId}] Frista not running, launching from {Path}",
+        // Launch new instance
+        Log.Information("[{CorrelationId}] Launching Frista from {Path}",
             correlationId, _config.ExecutablePath);
 
         if (!File.Exists(_config.ExecutablePath))
@@ -169,10 +166,9 @@ public sealed class FristaWorkflow
             throw new FileNotFoundException($"Frista executable not found: {_config.ExecutablePath}");
         }
 
-        // Use InteractiveProcessLauncher to handle Session 0 isolation when running as a service
         _process = InteractiveProcessLauncher.LaunchInUserSession(
-            _config.ExecutablePath, 
-            null, 
+            _config.ExecutablePath,
+            null,
             Path.GetDirectoryName(_config.ExecutablePath));
 
         if (_process == null)
@@ -202,7 +198,6 @@ public sealed class FristaWorkflow
                         Log.Information("[{CorrelationId}] Frista window detected: {WindowTitle}",
                             correlationId, window.Title);
 
-                        // Detect window state
                         return await DetectWindowStateAsync(correlationId);
                     }
                 }

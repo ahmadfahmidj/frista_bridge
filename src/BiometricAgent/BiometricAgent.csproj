@@ -13,6 +13,11 @@
     <!-- Application Icon -->
     <ApplicationIcon>asset\heartbeat.ico</ApplicationIcon>
     
+    <!-- Version -->
+    <Version>1.0.2</Version>
+    <AssemblyVersion>1.0.2.0</AssemblyVersion>
+    <FileVersion>1.0.2.0</FileVersion>
+
     <!-- Windows Service and Single-File Publish Settings -->
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PublishSingleFile>true</PublishSingleFile>

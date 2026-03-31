@@ -53,7 +53,7 @@ public static class StopExeEndpoint
                         Log.Warning("[{CorrelationId}] Frista.exe PID={ProcessId} did not exit gracefully, forcing termination",
                             correlationId, process.Id);
                         process.Kill();
-                        process.WaitForExit();
+                        process.WaitForExit(5000);
                     }
 
                     terminated++;

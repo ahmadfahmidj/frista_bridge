@@ -45,6 +45,11 @@ public sealed class AgentConfiguration
     /// Health monitoring configuration.
     /// </summary>
     public HealthConfig Health { get; set; } = new();
+
+    /// <summary>
+    /// Kiosk browser configuration.
+    /// </summary>
+    public KioskConfig Kiosk { get; set; } = new();
 }
 
 /// <summary>
@@ -294,4 +299,27 @@ public sealed class HealthConfig
     /// Enable /health HTTP endpoint.
     /// </summary>
     public bool EnableHealthEndpoint { get; set; } = true;
+}
+
+/// <summary>
+/// Kiosk browser launch configuration.
+/// </summary>
+public sealed class KioskConfig
+{
+    /// <summary>
+    /// URL to open in the default browser after Frista launches.
+    /// Leave empty to disable.
+    /// </summary>
+    public string Url { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Delay in seconds after Frista launches before opening the browser (default: 2).
+    /// </summary>
+    public int DelaySeconds { get; set; } = 2;
+
+    /// <summary>
+    /// Open the URL in fullscreen mode using Chrome or Edge app mode.
+    /// Falls back to normal browser if neither is found.
+    /// </summary>
+    public bool Fullscreen { get; set; } = true;
 }

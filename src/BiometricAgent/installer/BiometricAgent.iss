@@ -15,7 +15,7 @@
 ; ============================================
 
 #define MyAppName "Biometric Agent"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.2"
 #define MyAppPublisher "Frista"
 #define MyAppURL "https://frista.id"
 #define MyAppExeName "BiometricAgent.exe"
@@ -109,8 +109,8 @@ Source: "{#PublishDir}\win-x64\*"; DestDir: "{app}\win-x64"; Flags: ignoreversio
 
 ; Configuration files
 Source: "..\config\config.example.json"; DestDir: "{app}\config"; Flags: ignoreversion
-; Only copy config.json if it doesn't exist (don't overwrite user settings)
-Source: "..\config\config.example.json"; DestDir: "{app}\config"; DestName: "config.json"; Flags: onlyifdoesntexist
+; Only copy config.json if it doesn't exist (don't overwrite user settings on upgrade)
+Source: "..\config\config.json"; DestDir: "{app}\config"; DestName: "config.json"; Flags: onlyifdoesntexist
 
 ; Asset files (icons, etc.)
 Source: "..\asset\*"; DestDir: "{app}\asset"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -201,6 +201,11 @@ procedure AddUrlAcl();
 var
   ResultCode: Integer;
 begin
+  // Remove port 5001 from Windows excluded port range if present (Hyper-V sometimes reserves it)
+  Exec('netsh', 'int ipv4 delete excludedportrange protocol=tcp numberofports=1 startport=5001',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Log('Attempted to remove port 5001 from excluded port range (safe to ignore if not present)');
+
   // Remove existing URL ACL first (ignore errors)
   Exec('netsh', 'http delete urlacl url=http://127.0.0.1:5001/', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec('netsh', 'http delete urlacl url=http://+:5001/', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);

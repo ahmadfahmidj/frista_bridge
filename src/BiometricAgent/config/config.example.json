@@ -8,7 +8,7 @@
   "Applications": {
     "Frista": {
       "ExecutablePath": "C:\\Frista\\Frista.exe",
-      "StartupTimeoutSeconds": 10,
+      "StartupTimeoutSeconds": 45,
       "AutomationTimeoutSeconds": 30,
       "RetryAttempts": 3,
       "RetryDelayMs": 500
@@ -16,7 +16,7 @@
     
     "Finger": {
       "ExecutablePath": "C:\\Program Files (x86)\\BPJS Kesehatan\\Aplikasi Sidik Jari BPJS Kesehatan\\After.exe",
-      "StartupTimeoutSeconds": 10,
+      "StartupTimeoutSeconds": 45,
       "AutomationTimeoutSeconds": 30,
       "RetryAttempts": 3,
       "RetryDelayMs": 500
@@ -68,5 +68,11 @@
     "CheckIntervalSeconds": 60,
     "MaxMemoryUsageMB": 200,
     "EnableHealthEndpoint": true
+  },
+
+  "Kiosk": {
+    "Url": "http://172.16.3.94:8044/kiosk",
+    "DelaySeconds": 2,
+    "Fullscreen": true
   }
 }

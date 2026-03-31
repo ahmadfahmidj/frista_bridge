@@ -67,6 +67,12 @@ public sealed class ConfigurationLoader
 
             ValidateConfiguration(config);
 
+            // Decrypt DPAPI-encrypted credentials if they were encrypted with --encrypt-password
+            config.Credentials.FristaUsername = TryDecrypt(config.Credentials.FristaUsername, "FristaUsername");
+            config.Credentials.FristaPassword = TryDecrypt(config.Credentials.FristaPassword, "FristaPassword");
+            config.Credentials.FingerUsername = TryDecrypt(config.Credentials.FingerUsername, "FingerUsername");
+            config.Credentials.FingerPassword = TryDecrypt(config.Credentials.FingerPassword, "FingerPassword");
+
             Log.Information("Configuration loaded successfully");
             return config;
         }
@@ -147,6 +153,33 @@ public sealed class ConfigurationLoader
             var errorMessage = $"Configuration validation failed:\n" + string.Join("\n", errors.Select(e => $"  - {e}"));
             Log.Fatal(errorMessage);
             throw new InvalidOperationException(errorMessage);
+        }
+    }
+
+    /// <summary>
+    /// Decrypts a credential value if it is DPAPI-encrypted, otherwise returns it as-is.
+    /// Supports both plaintext and encrypted credentials in config.json.
+    /// </summary>
+    private static string TryDecrypt(string value, string fieldName)
+    {
+        if (!CredentialEncryption.IsEncrypted(value))
+        {
+            return value;
+        }
+
+        try
+        {
+            var decrypted = CredentialEncryption.Decrypt(value);
+            Log.Debug("Decrypted credential field: {FieldName}", fieldName);
+            return decrypted;
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Failed to decrypt credential field {FieldName}. " +
+                "Ensure the config was encrypted by the same Windows user account running this agent.", fieldName);
+            throw new InvalidOperationException(
+                $"Cannot decrypt credential '{fieldName}'. " +
+                "Re-run '--encrypt-password' as the current user and update config.json.", ex);
         }
     }
 }
