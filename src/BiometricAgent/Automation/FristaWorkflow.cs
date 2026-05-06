@@ -7,6 +7,7 @@ using FlaUI.Core.Definitions;
 using FlaUI.UIA3;
 using Serilog;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace BiometricAgent.Automation;
 
@@ -22,6 +23,21 @@ public sealed class FristaWorkflow
     private readonly int _maxErrorDialogAttempts;
     private Process? _process;
     private AutomationBase? _automation;
+
+    private static readonly IntPtr HwndTopMost = new(-1);
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpShowWindow = 0x0040;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(
+        IntPtr hWnd,
+        IntPtr hWndInsertAfter,
+        int x,
+        int y,
+        int cx,
+        int cy,
+        uint uFlags);
 
     public FristaWorkflow(
         ApplicationConfig config,
@@ -51,6 +67,7 @@ public sealed class FristaWorkflow
         {
             // Step 1: Launch Frista.exe or attach to existing process
             var windowState = await LaunchOrAttachFristaAsync(correlationId);
+            await BringWindowToFrontAsync(correlationId);
 
             // Step 2: Perform auto-login (only if on login window)
             if (windowState == WindowState.LoginWindow)
@@ -306,13 +323,38 @@ public sealed class FristaWorkflow
                     Log.Debug(ex, "[{CorrelationId}] Could not check/restore window state, continuing", correlationId);
                 }
 
-                // Bring to foreground
-                Log.Information("[{CorrelationId}] Bringing Frista window to foreground: '{WindowTitle}'",
+                // Bring to foreground and keep it above other windows while automation runs.
+                Log.Information("[{CorrelationId}] Bringing Frista window to topmost foreground: '{WindowTitle}'",
                     correlationId, mainWindow.Title);
+
+                _process.Refresh();
+                var windowHandle = _process.MainWindowHandle;
+                if (windowHandle != IntPtr.Zero)
+                {
+                    var topMostApplied = SetWindowPos(
+                        windowHandle,
+                        HwndTopMost,
+                        0,
+                        0,
+                        0,
+                        0,
+                        SwpNoMove | SwpNoSize | SwpShowWindow);
+
+                    if (!topMostApplied)
+                    {
+                        Log.Warning("[{CorrelationId}] SetWindowPos(HWND_TOPMOST) failed for Frista window. Error={ErrorCode}",
+                            correlationId, Marshal.GetLastWin32Error());
+                    }
+                }
+                else
+                {
+                    Log.Warning("[{CorrelationId}] Frista main window handle was zero, using SetForeground only", correlationId);
+                }
+
                 mainWindow.SetForeground();
                 await Task.Delay(200); // Wait for focus
 
-                Log.Information("[{CorrelationId}] Frista window activated successfully", correlationId);
+                Log.Information("[{CorrelationId}] Frista window activated as topmost successfully", correlationId);
             }
         }
         catch (Exception ex)
@@ -334,6 +376,8 @@ public sealed class FristaWorkflow
         {
             throw new InvalidOperationException("Automation not initialized");
         }
+
+        await BringWindowToFrontAsync(correlationId);
 
         var mainWindow = _automation.GetDesktop().FindFirstChild(cf => cf.ByProcessId(_process.Id));
 
@@ -421,6 +465,8 @@ public sealed class FristaWorkflow
             throw new InvalidOperationException("Automation not initialized");
         }
 
+        await BringWindowToFrontAsync(correlationId);
+
         var mainWindow = _automation.GetDesktop().FindFirstChild(cf => cf.ByProcessId(_process.Id));
 
         if (mainWindow == null)
@@ -466,6 +512,8 @@ public sealed class FristaWorkflow
         {
             throw new InvalidOperationException("Automation not initialized");
         }
+
+        await BringWindowToFrontAsync(correlationId);
 
         var mainWindow = _automation.GetDesktop().FindFirstChild(cf => cf.ByProcessId(_process.Id));
 
